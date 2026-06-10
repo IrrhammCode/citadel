@@ -131,6 +131,8 @@ export async function auditEnhanced(
     vendorHistory?: { totalPaid: number; transactionCount: number; averageAmount: number };
     recentAudits?: { amount: number; recipient: string; timestamp: number }[];
     onChainVerification?: { balance: string; hasActivity: boolean; riskLevel: string };
+    tatumIntelligence?: { isMalicious: boolean; maliciousDetails?: string; transactionCount: number; ensName?: string; riskLevel: string };
+    simulation?: { success: boolean; gasUsed: string; error?: string };
   },
 ): Promise<EnhancedVerdict> {
   const client = getVeniceClient();
@@ -142,8 +144,43 @@ export async function auditEnhanced(
       const { verifyAddressOnChain } = await import("@/lib/venice/rpc");
       onChainData = await verifyAddressOnChain(body.spendRequest.recipient);
     } catch {
-      // Crypto RPC not available, continue without it
       onChainData = { balance: "unknown", hasActivity: false, riskLevel: "unknown" };
+    }
+  }
+
+  // Get Tatum intelligence (malicious check + address analysis)
+  let tatumData = body.tatumIntelligence;
+  if (!tatumData) {
+    try {
+      const { getAddressIntelligence } = await import("@/lib/tatum/client");
+      const intel = await getAddressIntelligence(body.spendRequest.recipient);
+      tatumData = {
+        isMalicious: intel.isMalicious,
+        maliciousDetails: intel.maliciousDetails,
+        transactionCount: intel.transactionCount,
+        ensName: intel.ensName,
+        riskLevel: intel.riskLevel,
+      };
+    } catch {
+      tatumData = { isMalicious: false, transactionCount: 0, riskLevel: "unknown" };
+    }
+  }
+
+  // Simulate transaction
+  let simulationData = body.simulation;
+  if (!simulationData) {
+    try {
+      const { simulateERC20Transfer } = await import("@/lib/tatum/client");
+      const sim = await simulateERC20Transfer({
+        chain: "ETH",
+        from: "0x0000000000000000000000000000000000000000",
+        to: body.spendRequest.recipient,
+        amount: body.spendRequest.amount,
+        contractAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // USDC Sepolia
+      });
+      simulationData = { success: sim.success, gasUsed: sim.gasUsed, error: sim.error };
+    } catch {
+      simulationData = { success: true, gasUsed: "0" };
     }
   }
 
@@ -160,6 +197,8 @@ Evaluate on:
 6. Spending patterns — compare this transaction to recent history
 7. Vendor trust — assess based on transaction history
 8. On-chain verification — check recipient's on-chain activity and balance (if available)
+9. Malicious address check — Tatum security check (CRITICAL: block if flagged)
+10. Transaction simulation — preview outcome before execution
 
 You MUST respond with valid JSON only, no markdown:
 {
@@ -191,6 +230,8 @@ Be conservative: when in doubt, block. Approved only when clearly within policy.
       vendorHistory: body.vendorHistory ?? null,
       recentAudits: body.recentAudits?.slice(0, 10) ?? [],
       onChainVerification: onChainData,
+      tatumIntelligence: tatumData,
+      transactionSimulation: simulationData,
       policy: {
         allowedRecipientExample: "known vendor addresses only",
         blockPromptInjection: true,

@@ -46,11 +46,44 @@ export function useEnhancedAudit() {
         addAnomaly(anomaly);
       }
 
-      // Call enhanced Venice audit
+      // Get Tatum intelligence (malicious check + address analysis)
+      let tatumIntelligence = undefined;
+      try {
+        const tatumRes = await fetch(`/api/tatum?action=intelligence&address=${body.spendRequest.recipient}`);
+        if (tatumRes.ok) {
+          tatumIntelligence = await tatumRes.json();
+        }
+      } catch {
+        // Tatum not available, continue without it
+      }
+
+      // Simulate transaction via Tatum
+      let simulation = undefined;
+      try {
+        const simRes = await fetch("/api/tatum", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "simulateERC20",
+            chain: "ETH",
+            from: "0x0000000000000000000000000000000000000000",
+            to: body.spendRequest.recipient,
+            amount: body.spendRequest.amount,
+            contractAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+          }),
+        });
+        if (simRes.ok) {
+          simulation = await simRes.json();
+        }
+      } catch {
+        // Simulation not available
+      }
+
+      // Call enhanced Venice audit with Tatum data
       const res = await fetch("/api/audit-enhanced", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, vendorHistory, recentAudits }),
+        body: JSON.stringify({ ...body, vendorHistory, recentAudits, tatumIntelligence, simulation }),
       });
 
       if (!res.ok) {
