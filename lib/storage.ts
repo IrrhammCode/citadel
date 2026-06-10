@@ -10,6 +10,7 @@ import type {
   BudgetPool,
   AgentGoal,
 } from "@/types/agent";
+import type { ActivityEvent } from "@/types/activity";
 
 const PERMISSIONS_KEY = "citadel:permissions";
 const AUDIT_LOG_KEY = "citadel:audit-log";
@@ -293,4 +294,29 @@ export function updateAgentGoalSpent(systemId: string, amount: number) {
       : g,
   );
   writeJson(AGENT_GOALS_KEY, all);
+}
+
+// ─── Activity Feed ──────────────────────────────────────────
+
+const ACTIVITY_KEY = "citade…vity";
+
+export function getActivity(limit: number = 50): ActivityEvent[] {
+  return readJson<ActivityEvent[]>(ACTIVITY_KEY, []).slice(0, limit);
+}
+
+export function getSystemActivity(systemId: string, limit: number = 20): ActivityEvent[] {
+  return readJson<ActivityEvent[]>(ACTIVITY_KEY, [])
+    .filter((a) => a.systemId === systemId)
+    .slice(0, limit);
+}
+
+export function addActivity(event: Omit<ActivityEvent, "id" | "timestamp">) {
+  const all = readJson<ActivityEvent[]>(ACTIVITY_KEY, []);
+  const newEvent: ActivityEvent = {
+    ...event,
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+  };
+  writeJson(ACTIVITY_KEY, [newEvent, ...all].slice(0, 200));
+  return newEvent;
 }

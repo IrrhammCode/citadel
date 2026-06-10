@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit } from "lucide-react";
+import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
 const navItems = [
+  { href: "/demo", label: "Live Demo", icon: Play },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/systems", label: "Systems", icon: Bot },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText },
