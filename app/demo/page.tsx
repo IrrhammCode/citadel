@@ -41,7 +41,7 @@ import {
   addDailySpend,
 } from "@/lib/storage";
 import { AUTONOMOUS_SYSTEMS } from "@/types/system";
-import { DEMO_VENDOR_ADDRESS, DEMO_UNKNOWN_ADDRESS } from "@/lib/constants";
+import { DEFAULT_VENDOR_ADDRESS } from "@/lib/constants";
 import type { EnhancedVerdict } from "@/lib/venice/client";
 
 const STEPS = [
@@ -61,7 +61,7 @@ export default function DemoPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedSystem] = useState(AUTONOMOUS_SYSTEMS[0]); // Marketing Agent
   const [amount, setAmount] = useState("8");
-  const [recipient, setRecipient] = useState<string>(DEMO_VENDOR_ADDRESS);
+  const [recipient, setRecipient] = useState<string>(DEFAULT_VENDOR_ADDRESS);
   const [memo, setMemo] = useState("Q2 marketing vendor invoice #1042");
   const [executing, setExecuting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -136,7 +136,7 @@ export default function DemoPage() {
     setCurrentStep(1);
     setTxHash(null);
     setAmount("8");
-    setRecipient(DEMO_VENDOR_ADDRESS);
+    setRecipient(DEFAULT_VENDOR_ADDRESS);
     setMemo("Q2 marketing vendor invoice #1042");
   }
 
@@ -247,14 +247,12 @@ export default function DemoPage() {
                       </div>
                       <div>
                         <Label className="text-zinc-400">Recipient</Label>
-                        <select
+                        <Input
                           value={recipient}
                           onChange={(e) => setRecipient(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200"
-                        >
-                          <option value={DEMO_VENDOR_ADDRESS}>Known Vendor (Safe)</option>
-                          <option value={DEMO_UNKNOWN_ADDRESS}>Unknown Address (Suspicious)</option>
-                        </select>
+                          className="mt-1 bg-zinc-800 border-zinc-700 font-mono text-xs"
+                          placeholder="0x..."
+                        />
                       </div>
                       <div>
                         <Label className="text-zinc-400">Memo</Label>

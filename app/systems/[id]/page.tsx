@@ -14,7 +14,7 @@ import { getTrustScore, getAnomalies, getAuditLog } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export default function SystemSimulatorPage() {
+export default function SystemAgentPage() {
   const params = useParams<{ id: string }>();
   const { systems, loaded } = useSystems();
   const system = systems.find((s) => s.id === params.id);
@@ -43,7 +43,7 @@ export default function SystemSimulatorPage() {
   return (
     <AppShell
       title={system.name}
-      description={system.goal || "Autonomous spend simulator with Venice AI compliance firewall."}
+      description={system.goal || "Autonomous agent with Venice AI compliance firewall."}
     >
       <div className="space-y-6">
         {/* Agent Overview */}

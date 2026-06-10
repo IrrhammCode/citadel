@@ -9,10 +9,10 @@ export const USDC_ADDRESS =
 
 export const USDC_DECIMALS = 6;
 
-// Demo vendor (happy path)
-export const DEMO_VENDOR_ADDRESS =
+// Pre-configured vendor addresses (Sepolia testnet)
+export const DEFAULT_VENDOR_ADDRESS =
   "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as const;
 
-// Demo suspicious recipient (blocked path)
-export const DEMO_UNKNOWN_ADDRESS =
+// Suspicious address for risk assessment testing
+export const SUSPICIOUS_ADDRESS =
   "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" as const;

@@ -6,11 +6,11 @@ Citadel lets CFOs grant granular **ERC-7715 Advanced Permissions** to autonomous
 
 ## Features
 
-- **CFO Dashboard** — Connect MetaMask, manage autonomous systems, grant permissions
-- **ERC-7715 Permission Flow** — `requestExecutionPermissions` with scoped USDC daily limits
-- **Venice AI Compliance Firewall** — Real API audit with approve/block verdict and reasoning
-- **Spend Simulator** — Happy path (8 USDC vendor) and blocked path (50 USDC suspicious)
-- **Audit Log** — Full decision history with optional Sepolia tx links
+- **CFO Dashboard** - Connect MetaMask, manage autonomous systems, grant permissions
+- **ERC-7715 Permission Flow** - `requestExecutionPermissions` with scoped USDC daily limits
+- **Venice AI Compliance Firewall** - Real API audit with approve/block verdict and reasoning
+- **Vendor Payment Flow** - Real-time Venice AI compliance audit with approve/block verdict
+- **Audit Log** - Full decision history with optional Sepolia tx links
 
 ## Tech Stack
 
@@ -51,7 +51,7 @@ Citadel lets CFOs grant granular **ERC-7715 Advanced Permissions** to autonomous
    npm run dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000) — landing page first, then **Connect Wallet** to enter the dashboard
+4. Open [http://localhost:3000](http://localhost:3000) - landing page first, then **Connect Wallet** to enter the dashboard
 
 ## MetaMask Requirements
 
@@ -59,15 +59,15 @@ Citadel lets CFOs grant granular **ERC-7715 Advanced Permissions** to autonomous
 - Connected to **Sepolia** testnet
 - User must approve smart account upgrade when granting permissions (ERC-7710 delegation)
 
-## Demo Script (90 seconds)
+## Demo Flow (90 seconds)
 
 | Time | Action |
 |------|--------|
-| 0–15s | Intro: "Citadel — zero-trust treasury for autonomous agents" |
-| 15–35s | Landing → Connect Wallet → Dashboard → Grant Permission → **show MetaMask popup** |
-| 35–55s | Open Marketing System → "Pay vendor 8 USDC" → Venice approves |
-| 55–70s | "Suspicious 50 USDC" → Venice blocks with reasoning |
-| 70–90s | Show Audit Log + optional on-chain execution |
+| 0-15s | Intro: "Citadel - zero-trust treasury for autonomous agents" |
+| 15-35s | Landing → Connect Wallet → Dashboard → Grant Permission → **show MetaMask popup** |
+| 35-55s | Open Marketing System → "Pay vendor 8 USDC" → Venice approves |
+| 55-70s | "Suspicious 50 USDC" → Venice blocks with reasoning |
+| 70-90s | Show Audit Log + optional on-chain execution |
 
 ## Project Structure
 
@@ -81,8 +81,8 @@ types/         # Shared TypeScript types
 
 ## Hackathon Tracks
 
-- **Best Agent** — Autonomous system → Venice gate → delegation execution
-- **Best use of Venice AI** — Venice as core compliance engine in main flow
+- **Best Agent** - Autonomous system → Venice gate → delegation execution
+- **Best use of Venice AI** - Venice as core compliance engine in main flow
 
 ## License
 

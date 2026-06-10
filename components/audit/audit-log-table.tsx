@@ -45,7 +45,7 @@ export function AuditLogTable() {
             href="/systems/marketing"
             className="text-sm text-emerald-400 hover:underline"
           >
-            Go to Marketing System simulator →
+            Go to Marketing Agent →
           </Link>
         </motion.div>
       </motion.div>
