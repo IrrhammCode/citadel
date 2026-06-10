@@ -118,6 +118,44 @@ export default function DemoPage() {
           points: 1,
           timestamp: Date.now(),
         });
+
+        // Execute on-chain via delegation
+        try {
+          setExecuting(true);
+          const execRes = await fetch("/api/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              auditId: crypto.randomUUID(),
+              systemId: selectedSystem.id,
+              spendRequest: { amount, token: "USDC", recipient, memo },
+              grantedPermissions: permission.grantedPermissions,
+            }),
+          });
+
+          const execData = await execRes.json();
+          if (execRes.ok && execData.txHash) {
+            setTxHash(execData.txHash);
+            addActivity({
+              type: "execution",
+              systemId: selectedSystem.id,
+              systemName: selectedSystem.name,
+              message: `On-chain: ${amount} USDC → ${recipient.slice(0, 10)}...`,
+              details: `TX: ${execData.txHash.slice(0, 18)}...`,
+              severity: "success",
+            });
+          }
+        } catch (execErr) {
+          addActivity({
+            type: "execution",
+            systemId: selectedSystem.id,
+            systemName: selectedSystem.name,
+            message: `Execution failed: ${execErr instanceof Error ? execErr.message.slice(0, 50) : "unknown"}`,
+            severity: "error",
+          });
+        } finally {
+          setExecuting(false);
+        }
       } else {
         updateTrustScore(selectedSystem.id, {
           type: "blocked",

@@ -7,15 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuditVerdictPanel } from "@/components/audit/audit-verdict-panel";
-import { useVeniceAudit } from "@/hooks/useVeniceAudit";
+import { EnhancedVerdictPanel } from "@/components/audit/enhanced-verdict-panel";
+import { useEnhancedAudit } from "@/hooks/useEnhancedAudit";
 import { LoadingBar } from "@/components/motion/loading-bar";
 import { FadeIn } from "@/components/motion/motion";
 import {
   getDailySpend,
   getPermissionForSystem,
   addDailySpend,
-  updateAuditRecordTx,
 } from "@/lib/storage";
 import {
   SUSPICIOUS_ADDRESS,
@@ -28,7 +27,7 @@ type Props = {
 };
 
 export function SpendRequestForm({ system }: Props) {
-  const { audit, loading, error, verdict, lastRecord, reset } = useVeniceAudit();
+  const { audit, loading, error, verdict, reset } = useEnhancedAudit();
   const [amount, setAmount] = useState("8");
   const [recipient, setRecipient] = useState<string>(DEFAULT_VENDOR_ADDRESS);
   const [memo, setMemo] = useState("Q2 marketing vendor invoice #1042");
@@ -46,7 +45,7 @@ export function SpendRequestForm({ system }: Props) {
     reset();
     setTxHash(null);
 
-    const record = await audit({
+    const result = await audit({
       systemId: system.id,
       spendRequest: {
         amount,
@@ -63,13 +62,13 @@ export function SpendRequestForm({ system }: Props) {
       customPrompt: system.customPrompt,
     });
 
-    if (record?.verdict.decision === "approved") {
+    if (result?.decision === "approved") {
       addDailySpend(system.id, amount);
     }
   }
 
   async function executeApproved() {
-    if (!lastRecord || !permission || lastRecord.verdict.decision !== "approved") {
+    if (!verdict || !permission || verdict.decision !== "approved") {
       return;
     }
 
@@ -79,9 +78,9 @@ export function SpendRequestForm({ system }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          auditId: lastRecord.id,
+          auditId: crypto.randomUUID(),
           systemId: system.id,
-          spendRequest: lastRecord.spendRequest,
+          spendRequest: { amount, token: "USDC", recipient, memo },
           grantedPermissions: permission.grantedPermissions,
         }),
       });
@@ -90,7 +89,6 @@ export function SpendRequestForm({ system }: Props) {
       if (!res.ok) throw new Error(data.error ?? "Execution failed");
 
       setTxHash(data.txHash);
-      updateAuditRecordTx(lastRecord.id, data.txHash);
       toast.success("Transaction submitted via delegation");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Execution failed");
@@ -197,7 +195,7 @@ export function SpendRequestForm({ system }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <AuditVerdictPanel verdict={verdict} />
+            <EnhancedVerdictPanel verdict={verdict} />
           </motion.div>
         )}
       </AnimatePresence>
