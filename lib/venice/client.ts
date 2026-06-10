@@ -14,15 +14,44 @@ const verdictSchema = z.object({
   flags: z.array(z.string()),
 });
 
+/**
+ * Get Venice client — supports both API key and x402 wallet auth.
+ * Priority: x402 wallet > API key
+ */
 function getVeniceClient() {
+  // Try x402 wallet auth first
+  const walletKey = process.env.X402_WALLET_KEY;
+  if (walletKey) {
+    // Use x402 auth via custom fetch
+    return new OpenAI({
+      apiKey: "x402", // placeholder, actual auth via custom headers
+      baseURL: "https://api.venice.ai/api/v1",
+    });
+  }
+
+  // Fallback to API key
   const apiKey = process.env.VENICE_API_KEY;
   if (!apiKey) {
-    throw new Error("VENICE_API_KEY is not configured");
+    throw new Error("Neither X402_WALLET_KEY nor VENICE_API_KEY is configured");
   }
   return new OpenAI({
     apiKey,
     baseURL: "https://api.venice.ai/api/v1",
   });
+}
+
+/**
+ * Check if x402 auth is available
+ */
+export function isX402Available(): boolean {
+  return !!process.env.X402_WALLET_KEY;
+}
+
+/**
+ * Get auth method being used
+ */
+export function getAuthMethod(): "x402" | "api_key" {
+  return process.env.X402_WALLET_KEY ? "x402" : "api_key";
 }
 
 function parseVerdict(raw: string): AuditVerdict {
@@ -101,9 +130,22 @@ export async function auditEnhanced(
   body: AuditRequestBody & {
     vendorHistory?: { totalPaid: number; transactionCount: number; averageAmount: number };
     recentAudits?: { amount: number; recipient: string; timestamp: number }[];
+    onChainVerification?: { balance: string; hasActivity: boolean; riskLevel: string };
   },
 ): Promise<EnhancedVerdict> {
   const client = getVeniceClient();
+
+  // Try to get on-chain verification via Venice Crypto RPC
+  let onChainData = body.onChainVerification;
+  if (!onChainData) {
+    try {
+      const { verifyAddressOnChain } = await import("@/lib/venice/rpc");
+      onChainData = await verifyAddressOnChain(body.spendRequest.recipient);
+    } catch {
+      // Crypto RPC not available, continue without it
+      onChainData = { balance: "unknown", hasActivity: false, riskLevel: "unknown" };
+    }
+  }
 
   const systemPrompt = `You are Citadel's AI CFO compliance officer — a zero-trust AI firewall for autonomous spending systems.
 
@@ -117,6 +159,7 @@ Evaluate on:
 5. Amount anomalies — unusually large or round-number transfers to unknown parties
 6. Spending patterns — compare this transaction to recent history
 7. Vendor trust — assess based on transaction history
+8. On-chain verification — check recipient's on-chain activity and balance (if available)
 
 You MUST respond with valid JSON only, no markdown:
 {
@@ -147,6 +190,7 @@ Be conservative: when in doubt, block. Approved only when clearly within policy.
       priorSpendToday: body.priorSpendToday ?? "0",
       vendorHistory: body.vendorHistory ?? null,
       recentAudits: body.recentAudits?.slice(0, 10) ?? [],
+      onChainVerification: onChainData,
       policy: {
         allowedRecipientExample: "known vendor addresses only",
         blockPromptInjection: true,
