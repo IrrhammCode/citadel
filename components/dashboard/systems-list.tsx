@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Bot } from "lucide-react";
+import { ArrowRight, Bot, Target, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { useSystems } from "@/hooks/useSystems";
 import { usePermissions } from "@/hooks/usePermissions";
 import { GrantPermissionModal } from "@/components/permissions/grant-permission-modal";
 import { CreateSystemModal } from "@/components/systems/create-system-modal";
+import { TrustScoreBadge } from "@/components/agent/trust-score-badge";
+import { getTrustScore, getAuditLog } from "@/lib/storage";
 import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
 
 const statusVariant = {
@@ -27,9 +29,9 @@ export function SystemsList() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
-            <CardTitle>Autonomous Systems</CardTitle>
+            <CardTitle>Autonomous Agents</CardTitle>
             <CardDescription className="mt-1">
-              Grant granular ERC-7715 permissions to autonomous treasury agents.
+              AI agents with goals, trust scores, and autonomous spending capabilities.
             </CardDescription>
           </div>
           <CreateSystemModal />
@@ -38,6 +40,11 @@ export function SystemsList() {
           <Stagger stagger={0.1}>
             {systems.map((system) => {
               const permission = permissions.find((p) => p.systemId === system.id);
+              const trustScore = getTrustScore(system.id);
+              const totalSpent = getAuditLog()
+                .filter((r) => r.systemId === system.id && r.verdict.decision === "approved")
+                .reduce((sum, r) => sum + parseFloat(r.spendRequest.amount), 0);
+
               return (
                 <StaggerItem key={system.id}>
                   <motion.div
@@ -51,12 +58,13 @@ export function SystemsList() {
                       >
                         <Bot className="h-5 w-5 text-zinc-400" />
                       </motion.div>
-                      <div>
+                      <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-zinc-100">{system.name}</p>
                           <Badge variant={statusVariant[system.status]}>
                             {system.status}
                           </Badge>
+                          <TrustScoreBadge trustScore={trustScore} compact />
                           {permission && (
                             <motion.div
                               initial={{ scale: 0.8, opacity: 0 }}
@@ -66,12 +74,42 @@ export function SystemsList() {
                             </motion.div>
                           )}
                         </div>
-                        <p className="mt-1 text-sm text-zinc-400">{system.description}</p>
-                        {permission && (
-                          <p className="mt-1 text-xs text-emerald-400/80">
-                            Daily limit: {permission.maxDailySpend} USDC · Expires{" "}
-                            {new Date(permission.expiry * 1000).toLocaleDateString()}
-                          </p>
+                        <p className="mt-1 text-sm text-zinc-400">{system.goal || system.description}</p>
+
+                        {/* Agent Stats */}
+                        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-zinc-500">
+                          {system.budget && (
+                            <span className="flex items-center gap-1">
+                              <Target className="h-3 w-3" />
+                              Budget: {system.budget} USDC
+                            </span>
+                          )}
+                          {system.budget && (
+                            <span className="flex items-center gap-1">
+                              <Shield className="h-3 w-3" />
+                              Spent: {totalSpent.toFixed(2)} USDC
+                            </span>
+                          )}
+                          {permission && (
+                            <span>
+                              Daily limit: {permission.maxDailySpend} USDC · Expires{" "}
+                              {new Date(permission.expiry * 1000).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* KPIs */}
+                        {system.kpiTargets && system.kpiTargets.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {system.kpiTargets.map((kpi, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400"
+                              >
+                                {kpi.name}: {kpi.target}{kpi.unit === "x" ? "x" : kpi.unit === "%" ? "%" : ""}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -84,7 +122,7 @@ export function SystemsList() {
                       />
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/systems/${system.id}`}>
-                          Simulate
+                          Open Agent
                           <ArrowRight className="h-3 w-3" />
                         </Link>
                       </Button>

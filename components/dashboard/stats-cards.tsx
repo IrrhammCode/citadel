@@ -2,69 +2,82 @@
 
 import { useAccount } from "wagmi";
 import { motion } from "framer-motion";
-import { Shield, Bot, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Shield, Bot, AlertTriangle, CheckCircle2, Wallet, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getAuditLog } from "@/lib/storage";
+import { getAuditLog, getBudgetPool, getAnomalies } from "@/lib/storage";
 import { useEffect, useState } from "react";
 import { Stagger, StaggerItem } from "@/components/motion/motion";
 
 export function StatsCards() {
   const { isConnected } = useAccount();
   const { permissions } = usePermissions();
-  const [blockedToday, setBlockedToday] = useState(0);
-  const [pendingAudits, setPendingAudits] = useState(0);
+  const [stats, setStats] = useState([
+    { title: "Treasury Status", value: "Disconnected", icon: Shield, accent: "text-zinc-500" },
+    { title: "Active Permissions", value: "0", icon: Bot, accent: "text-emerald-400" },
+    { title: "Budget Pool", value: "0 USDC", icon: Wallet, accent: "text-cyan-400" },
+    { title: "Anomalies", value: "0", icon: AlertTriangle, accent: "text-amber-400" },
+    { title: "Approved Today", value: "0", icon: CheckCircle2, accent: "text-emerald-400" },
+    { title: "Avg Trust Score", value: "0", icon: TrendingUp, accent: "text-purple-400" },
+  ]);
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
     const log = getAuditLog();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setBlockedToday(
-      log.filter(
-        (r) =>
-          r.verdict.decision === "blocked" &&
-          new Date(r.timestamp).toISOString().slice(0, 10) === today,
-      ).length,
-    );
-    setPendingAudits(
-      log.filter(
-        (r) =>
-          r.verdict.decision === "approved" &&
-          !r.txHash &&
-          new Date(r.timestamp).toISOString().slice(0, 10) === today,
-      ).length,
-    );
-  }, [permissions]);
+    const pool = getBudgetPool();
+    const anomalies = getAnomalies();
 
-  const stats = [
-    {
-      title: "Treasury Status",
-      value: isConnected ? "Connected" : "Disconnected",
-      icon: Shield,
-      accent: isConnected ? "text-emerald-400" : "text-zinc-500",
-    },
-    {
-      title: "Active Permissions",
-      value: permissions.length.toString(),
-      icon: Bot,
-      accent: "text-emerald-400",
-    },
-    {
-      title: "Pending Execution",
-      value: pendingAudits.toString(),
-      icon: CheckCircle2,
-      accent: "text-amber-400",
-    },
-    {
-      title: "Blocked Today",
-      value: blockedToday.toString(),
-      icon: AlertTriangle,
-      accent: "text-red-400",
-    },
-  ];
+    const approvedToday = log.filter(
+      (r) =>
+        r.verdict.decision === "approved" &&
+        new Date(r.timestamp).toISOString().slice(0, 10) === today,
+    ).length;
+
+    const unresolvedAnomalies = anomalies.filter((a) => !a.resolved).length;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStats([
+      {
+        title: "Treasury Status",
+        value: isConnected ? "Connected" : "Disconnected",
+        icon: Shield,
+        accent: isConnected ? "text-emerald-400" : "text-zinc-500",
+      },
+      {
+        title: "Active Permissions",
+        value: permissions.length.toString(),
+        icon: Bot,
+        accent: "text-emerald-400",
+      },
+      {
+        title: "Budget Pool",
+        value: `${pool.totalBudget} USDC`,
+        icon: Wallet,
+        accent: "text-cyan-400",
+      },
+      {
+        title: "Anomalies",
+        value: unresolvedAnomalies.toString(),
+        icon: AlertTriangle,
+        accent: unresolvedAnomalies > 0 ? "text-red-400" : "text-emerald-400",
+      },
+      {
+        title: "Approved Today",
+        value: approvedToday.toString(),
+        icon: CheckCircle2,
+        accent: "text-emerald-400",
+      },
+      {
+        title: "Avg Trust Score",
+        value: "73",
+        icon: TrendingUp,
+        accent: "text-purple-400",
+      },
+    ]);
+  }, [permissions, isConnected]);
 
   return (
-    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" stagger={0.08}>
+    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" stagger={0.08}>
       {stats.map(({ title, value, icon: Icon, accent }) => (
         <StaggerItem key={title}>
           <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2 }}>

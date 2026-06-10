@@ -6,8 +6,11 @@ import { motion } from "framer-motion";
 import { AppShell } from "@/components/layout/app-shell";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { SystemsList } from "@/components/dashboard/systems-list";
+import { BudgetPoolCard } from "@/components/agent/budget-pool-card";
+import { AnomalyAlerts } from "@/components/agent/anomaly-alerts";
 import { PermissionCard } from "@/components/permissions/permission-card";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getBudgetPool, getAnomalies } from "@/lib/storage";
 import { LandingCta } from "@/components/landing/landing-cta";
 import { Stagger, StaggerItem } from "@/components/motion/motion";
 import { Shield } from "lucide-react";
@@ -16,11 +19,13 @@ import { Button } from "@/components/ui/button";
 export default function DashboardPage() {
   const { isConnected } = useAccount();
   const { permissions } = usePermissions();
+  const pool = getBudgetPool();
+  const anomalies = getAnomalies();
 
   return (
     <AppShell
-      title="CFO Dashboard"
-      description="Issue granular ERC-7715 permissions to autonomous treasury systems."
+      title="AI CFO Dashboard"
+      description="Autonomous treasury management with goals, trust scores, and multi-agent coordination."
     >
       <div className="space-y-8">
         {!isConnected && (
@@ -39,8 +44,7 @@ export default function DashboardPage() {
               <div>
                 <p className="font-medium text-zinc-200">Connect your treasury wallet</p>
                 <p className="text-sm text-zinc-400">
-                  Connect MetaMask to grant Advanced Permissions and manage autonomous
-                  spending systems.
+                  Connect MetaMask to grant Advanced Permissions and manage autonomous agents.
                 </p>
               </div>
             </div>
@@ -49,6 +53,15 @@ export default function DashboardPage() {
         )}
 
         <StatsCards />
+
+        {/* Budget Pool + Anomalies */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BudgetPoolCard pool={pool} />
+          <div className="space-y-4">
+            <AnomalyAlerts anomalies={anomalies} />
+          </div>
+        </div>
+
         <SystemsList />
 
         {permissions.length > 0 && (
