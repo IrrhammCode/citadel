@@ -1,0 +1,260 @@
+import OpenAI from "openai";
+import { z } from "zod";
+
+// ─── Types ──────────────────────────────────────────────────
+
+export type AgentState = {
+  systemId: string;
+  systemName: string;
+  goal: string;
+  budget: {
+    total: number;
+    remaining: number;
+    spent: number;
+  };
+  kpis: {
+    name: string;
+    target: number;
+    current: number;
+    unit: string;
+    isHigherBetter: boolean;
+    status: "met" | "behind" | "ahead";
+  }[];
+  pendingTasks: {
+    id: string;
+    type: "invoice" | "vendor_onboard" | "report" | "negotiate" | "custom";
+    description: string;
+    amount?: number;
+    recipient?: string;
+    priority: "low" | "medium" | "high";
+  }[];
+  recentTransactions: {
+    amount: number;
+    recipient: string;
+    memo: string;
+    timestamp: number;
+    decision: "approved" | "blocked";
+  }[];
+  marketContext?: string;
+  knowledge?: string[];
+};
+
+export type AgentAction = {
+  type: "spend" | "negotiate" | "report" | "onboard_vendor" | "wait" | "custom";
+  description: string;
+  amount?: number;
+  recipient?: string;
+  memo?: string;
+  reasoning: string;
+  confidence: number;
+  priority: "low" | "medium" | "high";
+};
+
+export type AgentDecision = {
+  actions: AgentAction[];
+  reasoning: string;
+  confidence: number;
+  nextCycleDelay: number; // minutes
+};
+
+// ─── Schema ─────────────────────────────────────────────────
+
+const actionSchema = z.object({
+  type: z.enum(["spend", "negotiate", "report", "onboard_vendor", "wait", "custom"]),
+  description: z.string(),
+  amount: z.number().optional(),
+  recipient: z.string().optional(),
+  memo: z.string().optional(),
+  reasoning: z.string(),
+  confidence: z.number().min(0).max(1),
+  priority: z.enum(["low", "medium", "high"]),
+});
+
+const decisionSchema = z.object({
+  actions: z.array(actionSchema),
+  reasoning: z.string(),
+  confidence: z.number().min(0).max(1),
+  nextCycleDelay: z.number().min(1).max(1440),
+});
+
+// ─── Venice Client ──────────────────────────────────────────
+
+function getVeniceClient() {
+  const apiKey = process.env.VENICE_API_KEY;
+  if (!apiKey) throw new Error("VENICE_API_KEY is not configured");
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://api.venice.ai/api/v1",
+  });
+}
+
+// ─── Agent Brain ────────────────────────────────────────────
+
+export async function think(state: AgentState): Promise<AgentDecision> {
+  const client = getVeniceClient();
+
+  const systemPrompt = `You are an autonomous AI treasury agent. Your job is to make intelligent spending and management decisions to achieve your goal while staying within budget and meeting KPIs.
+
+CORE PRINCIPLES:
+1. Always stay within budget — never exceed remaining balance
+2. Prioritize actions that move KPIs toward targets
+3. Be conservative with new vendors — verify before paying
+4. Generate reports when KPIs are behind target
+5. Negotiate when you can get better deals
+6. Learn from recent transactions — avoid repeating mistakes
+
+DECISION FRAMEWORK:
+- If KPIs are met → optimize for efficiency
+- If KPIs are behind → take corrective action
+- If budget is low → prioritize high-impact actions
+- If anomalies detected → investigate before acting
+
+You MUST respond with valid JSON only:
+{
+  "actions": [
+    {
+      "type": "spend" | "negotiate" | "report" | "onboard_vendor" | "wait" | "custom",
+      "description": "what you want to do",
+      "amount": number (for spend actions),
+      "recipient": "address" (for spend actions),
+      "memo": "description" (for spend actions),
+      "reasoning": "why this action",
+      "confidence": 0.0-1.0,
+      "priority": "low" | "medium" | "high"
+    }
+  ],
+  "reasoning": "overall strategy explanation",
+  "confidence": 0.0-1.0,
+  "nextCycleDelay": minutes until next decision cycle
+}
+
+RULES:
+- Maximum 3 actions per cycle
+- Total spend cannot exceed remaining budget
+- Confidence < 0.5 → use "wait" action instead
+- Always include reasoning for each action`;
+
+  const userPrompt = buildUserPrompt(state);
+
+  const response = await client.chat.completions.create({
+    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("Venice returned an empty response");
+
+  try {
+    const parsed = JSON.parse(content);
+    return decisionSchema.parse(parsed);
+  } catch {
+    // Retry with stricter prompt
+    const retry = await client.chat.completions.create({
+      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+      temperature: 0,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+        { role: "user", content: "Respond with JSON only. No markdown fences." },
+      ],
+    });
+    const retryContent = retry.choices[0]?.message?.content;
+    if (!retryContent) throw new Error("Venice retry returned empty response");
+    return decisionSchema.parse(JSON.parse(retryContent));
+  }
+}
+
+// ─── Build User Prompt ──────────────────────────────────────
+
+function buildUserPrompt(state: AgentState): string {
+  const kpiSummary = state.kpis.map((k) => {
+    const progress = k.isHigherBetter
+      ? ((k.current / k.target) * 100).toFixed(1)
+      : k.target > 0 ? (((k.target - (k.current - k.target)) / k.target) * 100).toFixed(1) : "100";
+    return `- ${k.name}: ${k.current}${k.unit} / ${k.target}${k.unit} (${progress}%) [${k.status}]`;
+  }).join("\n");
+
+  const pendingTasks = state.pendingTasks.length > 0
+    ? state.pendingTasks.map((t) => `- [${t.priority.toUpperCase()}] ${t.description}${t.amount ? ` (${t.amount} USDC)` : ""}`).join("\n")
+    : "- No pending tasks";
+
+  const recentTx = state.recentTransactions.length > 0
+    ? state.recentTransactions.slice(-5).map((t) => `- ${t.decision === "approved" ? "✅" : "❌"} ${t.amount} USDC to ${t.recipient.slice(0, 10)}... — ${t.memo}`).join("\n")
+    : "- No recent transactions";
+
+  const knowledge = state.knowledge && state.knowledge.length > 0
+    ? `\nKNOWLEDGE BASE:\n${state.knowledge.map((k) => `- ${k}`).join("\n")}`
+    : "";
+
+  return `AGENT: ${state.systemName}
+GOAL: ${state.goal}
+
+BUDGET:
+- Total: ${state.budget.total} USDC
+- Remaining: ${state.budget.remaining} USDC
+- Spent: ${state.budget.spent} USDC (${((state.budget.spent / state.budget.total) * 100).toFixed(1)}%)
+
+KPIs:
+${kpiSummary}
+
+PENDING TASKS:
+${pendingTasks}
+
+RECENT TRANSACTIONS:
+${recentTx}
+${knowledge}
+
+${state.marketContext ? `MARKET CONTEXT:\n${state.marketContext}` : ""}
+
+What actions should you take next to achieve your goal and meet your KPIs?`;
+}
+
+// ─── Quick Think (for simulation) ───────────────────────────
+
+export async function thinkQuick(
+  state: AgentState,
+  scenario: string,
+): Promise<{ action: AgentAction; reasoning: string }> {
+  const client = getVeniceClient();
+
+  const prompt = `You are ${state.systemName}. Your goal: ${state.goal}.
+Budget: ${state.budget.remaining} USDC remaining.
+KPIs: ${state.kpis.map((k) => `${k.name}: ${k.current}/${k.target}`).join(", ")}
+
+Scenario: ${scenario}
+
+What would you do? Respond with JSON:
+{
+  "action": {
+    "type": "spend" | "negotiate" | "report" | "onboard_vendor" | "wait" | "custom",
+    "description": "what you want to do",
+    "amount": number (for spend),
+    "recipient": "address" (for spend),
+    "memo": "description" (for spend),
+    "reasoning": "why",
+    "confidence": 0.0-1.0,
+    "priority": "low" | "medium" | "high"
+  },
+  "reasoning": "overall explanation"
+}`;
+
+  const response = await client.chat.completions.create({
+    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: "You are an autonomous treasury agent. Respond with JSON only." },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("Venice returned an empty response");
+
+  return JSON.parse(content);
+}

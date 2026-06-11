@@ -11,6 +11,7 @@ const navItems = [
   { href: "/demo", label: "Live Demo", icon: Play },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/systems", label: "Systems", icon: Bot },
+  { href: "/playground", label: "Playground", icon: BrainCircuit },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText },
   { href: "/network", label: "Agent Network", icon: Network },
   { href: "/relayer", label: "Gas & Relayer", icon: Zap },
