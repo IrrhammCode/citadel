@@ -80,10 +80,20 @@ export function StatsCards() {
     <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" stagger={0.08}>
       {stats.map(({ title, value, icon: Icon, accent }) => (
         <StaggerItem key={title}>
-          <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2 }}>
-            <Card className="overflow-hidden">
+          <motion.div
+            whileHover={{ y: -4 }}
+            transition={{ duration: 0.2 }}
+            data-active={
+              (title === "Treasury Status" && value === "Connected") ||
+              (title === "Anomalies" && value === "0") ||
+              (title === "Approved Today" && value !== "0")
+                ? "true"
+                : undefined
+            }
+          >
+            <Card className="group overflow-hidden border-zinc-800 transition-all duration-200 hover:border-emerald-500/10 hover:shadow-[0_0_20px_rgba(16,185,129,0.08)] hover:shadow-emerald-500/5 data-[active=true]:shadow-[0_0_24px_rgba(16,185,129,0.15)] data-[active=true]:border-emerald-500/20">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-zinc-400">
+                <CardTitle className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors duration-200">
                   {title}
                 </CardTitle>
                 <motion.div

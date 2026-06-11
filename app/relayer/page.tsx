@@ -82,14 +82,18 @@ export default function RelayerPage() {
         <Stagger className="space-y-6" stagger={0.1}>
           {/* 1Shot Relayer */}
           <StaggerItem>
-            <Card>
+            <Card className="transition-all duration-200 hover:border-emerald-900/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.06)]">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Zap className="h-5 w-5 text-emerald-400" />
                     <CardTitle className="text-lg">1Shot Permissionless Relayer</CardTitle>
                   </div>
-                  <Switch checked={use1Shot} onCheckedChange={setUse1Shot} />
+                  <Switch
+                    checked={use1Shot}
+                    onCheckedChange={setUse1Shot}
+                    className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-600"
+                  />
                 </div>
                 <CardDescription className="mt-2">
                   Route ERC-7710 transactions through the 1Shot mainnet relayer instead of public RPCs.
@@ -126,14 +130,18 @@ export default function RelayerPage() {
 
           {/* Gas Sponsorship */}
           <StaggerItem>
-            <Card className={use1Shot ? "opacity-100 transition-opacity" : "opacity-50 pointer-events-none transition-opacity"}>
+            <Card className={`transition-all duration-200 hover:border-emerald-900/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.06)] ${use1Shot ? "opacity-100" : "opacity-50 pointer-events-none"}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Server className="h-5 w-5 text-emerald-400" />
                     <CardTitle className="text-lg">Gas Sponsorship (Paymaster)</CardTitle>
                   </div>
-                  <Switch checked={sponsorGas} onCheckedChange={setSponsorGas} />
+                  <Switch
+                    checked={sponsorGas}
+                    onCheckedChange={setSponsorGas}
+                    className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-600"
+                  />
                 </div>
                 <CardDescription className="mt-2">
                   Sponsor gas fees for your agents, or force them to pay gas using ERC-20 stablecoins.
@@ -170,28 +178,43 @@ export default function RelayerPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 mb-6">
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Total Relayed (1Shot)</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">{stats.totalRelayed} Tx</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Successful</p>
-                    <p className="mt-1 text-xl font-semibold text-emerald-400">{stats.successful}</p>
+              <div className="grid gap-3 mb-6">
+                <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 transition-all duration-200 hover:border-emerald-900/50 hover:bg-zinc-900/60">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Total Relayed (1Shot)</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Failed</p>
-                    <p className="mt-1 text-xl font-semibold text-red-400">{stats.failed}</p>
+                  <p className="mt-2 text-2xl font-bold text-zinc-100 font-mono">{stats.totalRelayed} <span className="text-sm font-normal text-zinc-500">Tx</span></p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 transition-all duration-200 hover:border-emerald-900/50 hover:bg-zinc-900/60">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider">Successful</p>
+                    </div>
+                    <p className="mt-2 text-xl font-bold text-emerald-400 font-mono">{stats.successful}</p>
+                  </div>
+                  <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 transition-all duration-200 hover:border-red-900/40 hover:bg-zinc-900/60">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-3.5 w-3.5 text-zinc-500 group-hover:text-red-400 transition-colors" />
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider">Failed</p>
+                    </div>
+                    <p className="mt-2 text-xl font-bold text-red-400 font-mono">{stats.failed}</p>
                   </div>
                 </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Gas Saved (Sponsorship)</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">{stats.gasSaved.toFixed(3)} ETH</p>
+                <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 transition-all duration-200 hover:border-emerald-900/50 hover:bg-zinc-900/60">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Gas Saved (Sponsorship)</p>
+                  </div>
+                  <p className="mt-2 text-2xl font-bold text-zinc-100 font-mono">{stats.gasSaved.toFixed(3)} <span className="text-sm font-normal text-zinc-500">ETH</span></p>
                 </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider">USDC Paid for Gas</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">${stats.usdcPaidForGas.toFixed(2)}</p>
+                <div className="group rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 transition-all duration-200 hover:border-emerald-900/50 hover:bg-zinc-900/60">
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">USDC Paid for Gas</p>
+                  </div>
+                  <p className="mt-2 text-2xl font-bold text-zinc-100 font-mono">${stats.usdcPaidForGas.toFixed(2)}</p>
                 </div>
               </div>
 
@@ -215,7 +238,7 @@ export default function RelayerPage() {
                           <p className="text-[10px] text-zinc-500">{tx.action}</p>
                         </div>
                       </div>
-                      <span className="font-mono text-[10px] text-zinc-500">{tx.hash.slice(0, 10)}...</span>
+                      <span className="font-mono text-[11px] text-zinc-500 tracking-tight">{tx.hash.slice(0, 10)}…</span>
                     </div>
                   ))}
                 </div>

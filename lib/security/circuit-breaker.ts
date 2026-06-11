@@ -227,6 +227,7 @@ export function isGlobalEmergencyStop(): boolean {
 }
 
 export function activateGlobalEmergencyStop(): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(EMERGENCY_KEY, "true");
   const events = getSecurityEvents();
   events.push({
@@ -239,6 +240,7 @@ export function activateGlobalEmergencyStop(): void {
 }
 
 export function deactivateGlobalEmergencyStop(): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(EMERGENCY_KEY, "false");
   const events = getSecurityEvents();
   events.push({

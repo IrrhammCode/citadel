@@ -110,7 +110,18 @@ export function LandingPage() {
 
       {/* Hero */}
       <section className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-20 md:pt-28">
-        <FadeIn className="max-w-3xl">
+        {/* Emerald radial glow behind hero */}
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/4 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            width: "700px",
+            height: "500px",
+            background:
+              "radial-gradient(ellipse at center, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 40%, transparent 70%)",
+            filter: "blur(60px)",
+          }}
+        />
+        <FadeIn className="max-w-3xl relative">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -120,7 +131,7 @@ export function LandingPage() {
               MetaMask Smart Accounts Kit Hackathon
             </Badge>
           </motion.div>
-          <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-zinc-50 md:text-6xl">
+          <h1 className="text-5xl font-bold leading-[1.1] tracking-tight text-zinc-50 md:text-6xl">
             Corporate treasury,{" "}
             <motion.span
               className="inline-block bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent"
@@ -131,11 +142,16 @@ export function LandingPage() {
             </motion.span>{" "}
             by design.
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400">
+          <motion.p
+            className="mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+          >
             Citadel lets CFOs issue granular on-chain permissions to autonomous
             systems. Every spending attempt is audited by Venice AI before
             execution — so agents move fast, but never outside policy.
-          </p>
+          </motion.p>
           <motion.div
             className="mt-10 flex flex-wrap items-center gap-4"
             initial={{ opacity: 0, y: 12 }}
@@ -161,8 +177,9 @@ export function LandingPage() {
               {heroStats.map((item) => (
                 <StaggerItem key={item.label}>
                   <motion.div
-                    whileHover={{ y: -6, borderColor: "rgba(16,185,129,0.3)" }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5"
+                    whileHover={{ y: -6, borderColor: "rgba(16,185,129,0.2)" }}
+                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5 transition-colors duration-200"
                   >
                     <p className="text-xs uppercase tracking-wider text-zinc-500">
                       {item.label}

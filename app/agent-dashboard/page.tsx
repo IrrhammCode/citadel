@@ -19,6 +19,8 @@ import {
   Settings,
   Loader2,
   Database,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -180,57 +182,57 @@ export default function AgentDashboardPage() {
 
         {/* Stats Overview */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-          <Card>
+          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-                  <Bot className="h-5 w-5 text-emerald-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.15)]">
+                  <Bot className="h-5 w-5 text-[#10b981]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-zinc-100">{systems.length}</p>
-                  <p className="text-xs text-zinc-500">Total Agents</p>
+                  <p className="text-2xl font-bold text-[#f2f2f2]">{systems.length}</p>
+                  <p className="text-xs text-[#71717a]">Total Agents</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10">
-                  <Activity className="h-5 w-5 text-emerald-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.15)]">
+                  <Activity className="h-5 w-5 text-[#10b981]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-zinc-100">{runningAgents.length}</p>
-                  <p className="text-xs text-zinc-500">Running</p>
+                  <p className="text-2xl font-bold text-[#f2f2f2]">{runningAgents.length}</p>
+                  <p className="text-xs text-[#71717a]">Running</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-600/10">
-                  <Zap className="h-5 w-5 text-zinc-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800">
+                  <Zap className="h-5 w-5 text-[#a1a1aa]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-zinc-100">{totalCycles}</p>
-                  <p className="text-xs text-zinc-500">Total Cycles</p>
+                  <p className="text-2xl font-bold text-[#f2f2f2]">{totalCycles}</p>
+                  <p className="text-xs text-[#71717a]">Total Cycles</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-600/10">
-                  <Brain className="h-5 w-5 text-zinc-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800">
+                  <Brain className="h-5 w-5 text-[#a1a1aa]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-zinc-100">{decisionLogs.length}</p>
-                  <p className="text-xs text-zinc-500">Decisions</p>
+                  <p className="text-2xl font-bold text-[#f2f2f2]">{decisionLogs.length}</p>
+                  <p className="text-xs text-[#71717a]">Decisions</p>
                 </div>
               </div>
             </CardContent>
@@ -262,41 +264,90 @@ export default function AgentDashboardPage() {
                 return (
                   <StaggerItem key={system.id}>
                     <motion.div
-                      whileHover={{ x: 4 }}
-                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 p-4"
+                      layout
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      whileHover={{ x: 4, borderColor: "rgba(16,185,129,0.3)" }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className={`flex items-center justify-between rounded-lg border p-4 transition-all duration-200 ${
+                        isRunning
+                          ? "border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.05)] shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                          : "border-zinc-800 bg-zinc-900/30"
+                      }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isRunning ? "bg-emerald-600/10" : "bg-zinc-800"}`}>
+                        <motion.div
+                          className={`relative flex h-8 w-8 items-center justify-center rounded-lg ${
+                            isRunning ? "bg-[rgba(16,185,129,0.15)]" : "bg-zinc-800"
+                          }`}
+                          animate={isRunning ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 12px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] } : { boxShadow: "none" }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                        >
                           {isRunning ? (
-                            <Activity className="h-4 w-4 text-emerald-400 animate-pulse" />
+                            <Activity className="h-4 w-4 text-[#10b981]" />
                           ) : (
-                            <Bot className="h-4 w-4 text-zinc-400" />
+                            <Bot className="h-4 w-4 text-[#a1a1aa]" />
                           )}
-                        </div>
+                        </motion.div>
                         <div>
-                          <p className="font-medium text-zinc-100">{system.name}</p>
-                          <p className="text-xs text-zinc-500">
+                          <p className="font-medium text-[#f2f2f2]">{system.name}</p>
+                          <p className="text-xs text-[#71717a]">
                             {isRunning ? `${status?.cycleCount ?? 0} cycles` : "Stopped"}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Badge variant={isRunning ? "default" : "secondary"}>
-                          {isRunning ? "Running" : "Stopped"}
-                        </Badge>
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={isRunning ? "running" : "stopped"}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ duration: 0.15 }}
+                          >
+                            <Badge
+                              className={
+                                isRunning
+                                  ? "bg-[rgba(16,185,129,0.15)] text-[#10b981] border border-[rgba(16,185,129,0.3)]"
+                                  : "bg-zinc-800 text-[#a1a1aa] border border-zinc-700"
+                              }
+                            >
+                              {isRunning ? "Running" : "Stopped"}
+                            </Badge>
+                          </motion.div>
+                        </AnimatePresence>
 
                         {isRunning ? (
-                          <Button variant="outline" size="sm" onClick={() => handleStopAgent(system.id)} disabled={isLoading}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStopAgent(system.id)}
+                            disabled={isLoading}
+                            className="border-zinc-700 bg-transparent text-[#a1a1aa] hover:border-[#ef4444] hover:bg-[rgba(239,68,68,0.1)] hover:text-[#ef4444] transition-all duration-200"
+                          >
                             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
                           </Button>
                         ) : (
-                          <Button variant="default" size="sm" onClick={() => handleStartAgent(system.id)} disabled={isLoading}>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleStartAgent(system.id)}
+                            disabled={isLoading}
+                            className="bg-[#10b981] text-[#0a0a0f] hover:bg-[#059669] font-semibold transition-all duration-200 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                          >
                             {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                           </Button>
                         )}
 
-                        <Button variant="ghost" size="sm" onClick={() => handleRunCycle(system.id)} disabled={isLoading} title="Run single cycle (calls Venice AI)">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRunCycle(system.id)}
+                          disabled={isLoading}
+                          title="Run single cycle (calls Venice AI)"
+                          className="text-[#a1a1aa] hover:text-[#f2f2f2] hover:bg-zinc-800 transition-all duration-200"
+                        >
                           {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                         </Button>
                       </div>
@@ -319,32 +370,55 @@ export default function AgentDashboardPage() {
               <Stagger className="space-y-4" stagger={0.05}>
                 {decisionLogs.slice(0, 10).map((log) => (
                   <StaggerItem key={log.id}>
-                    <motion.div whileHover={{ x: 4 }} className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+                    <motion.div
+                      whileHover={{ x: 4, borderColor: "rgba(16,185,129,0.3)" }}
+                      transition={{ duration: 0.2 }}
+                      className={`rounded-lg border p-4 transition-all duration-200 ${
+                        log.outcome?.success
+                          ? "border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.03)]"
+                          : log.outcome && !log.outcome.success
+                          ? "border-[rgba(239,68,68,0.2)] bg-[rgba(239,68,68,0.03)]"
+                          : "border-zinc-800 bg-zinc-900/30"
+                      }`}
+                    >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Brain className="h-4 w-4 text-emerald-400" />
-                          <span className="font-medium text-zinc-100">{log.systemId}</span>
+                          <Brain className="h-4 w-4 text-[#10b981]" />
+                          <span className="font-medium text-[#f2f2f2]">{log.systemId}</span>
                         </div>
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-[#71717a]">
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
                       <div className="space-y-2">
                         {log.decision?.actions?.map((action: any, i: number) => (
                           <div key={i} className="flex items-center gap-2 text-sm">
-                            <Badge variant="outline" className="text-xs">{action.type}</Badge>
-                            <span className="text-zinc-300">{action.description}</span>
-                            <span className="text-xs text-zinc-500">({(action.confidence * 100).toFixed(0)}%)</span>
+                            <Badge variant="outline" className="text-xs border-zinc-700 text-[#a1a1aa]">{action.type}</Badge>
+                            <span className="text-[#f2f2f2]">{action.description}</span>
+                            <span className="text-xs text-[#71717a] font-mono">({(action.confidence * 100).toFixed(0)}%)</span>
                           </div>
                         ))}
                       </div>
                       {log.decision?.reasoning && (
-                        <p className="mt-3 text-xs text-zinc-500">{log.decision.reasoning}</p>
+                        <p className="mt-3 text-xs text-[#71717a]">{log.decision.reasoning}</p>
                       )}
                       {log.outcome && (
                         <div className="mt-2">
-                          <Badge variant={log.outcome.success ? "default" : "destructive"} className="text-xs">
-                            {log.outcome.success ? "Success" : log.outcome.error || "Failed"}
+                          <Badge
+                            className={
+                              log.outcome.success
+                                ? "bg-[rgba(16,185,129,0.15)] text-[#10b981] border border-[rgba(16,185,129,0.3)]"
+                                : "bg-[rgba(239,68,68,0.15)] text-[#ef4444] border border-[rgba(239,68,68,0.3)]"
+                            }
+                          >
+                            <span className="flex items-center gap-1">
+                              {log.outcome.success ? (
+                                <ShieldCheck className="h-3 w-3" />
+                              ) : (
+                                <ShieldX className="h-3 w-3" />
+                              )}
+                              {log.outcome.success ? "Success" : log.outcome.error || "Failed"}
+                            </span>
                           </Badge>
                         </div>
                       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
@@ -19,6 +19,7 @@ import {
   DollarSign,
   AlertTriangle,
   Database,
+  Loader2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -149,6 +150,16 @@ export default function DemoPage() {
     result: "Final state:\n• Vendor received 8 USDC ✅\n• Marketing Agent budget: 500 → 492 USDC\n• Trust score: 82 → 85 (+3)\n• Audit log updated\n• KPI progress: ROI 1.8x → 1.9x\n• Anomaly logged for blocked request",
   };
 
+  // Smooth scroll to active step
+  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const el = stepRefs.current[currentStep];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [currentStep]);
+
   // Auto-advance steps
   useState(() => {
     if (isPlaying) {
@@ -189,7 +200,11 @@ export default function DemoPage() {
             Reset
           </Button>
           <Button variant="secondary" onClick={handleSeedData} disabled={isSeeding}>
-            <Database className="h-4 w-4 mr-2" />
+            {isSeeding ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Database className="h-4 w-4 mr-2" />
+            )}
             {isSeeding ? "Seeding..." : "Seed Demo Data"}
           </Button>
           <div className="flex-1" />
@@ -212,21 +227,24 @@ export default function DemoPage() {
               return (
                 <StaggerItem key={step.id}>
                   <motion.div
+                    ref={(el) => { stepRefs.current[index] = el; }}
                     animate={{
-                      opacity: isActive ? 1 : isCompleted ? 0.8 : 0.5,
+                      opacity: isActive ? 1 : isCompleted ? 0.85 : 0.5,
                       x: isActive ? 8 : 0,
+                      scale: isActive ? 1.02 : 1,
                     }}
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
                     className="relative flex gap-6"
                   >
                     {/* Icon */}
                     <div
-                      className={`relative z-10 flex h-16 w-16 items-center justify-center rounded-full border-2 ${
+                      className={`relative z-10 flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-300 ${
                         isActive
-                          ? "border-emerald-500 bg-emerald-500/10"
+                          ? "border-emerald-500 bg-emerald-500/15 shadow-[0_0_16px_rgba(16,185,129,0.25)]"
                           : isCompleted
-                          ? "border-emerald-500 bg-emerald-500/20"
+                          ? "border-emerald-500 bg-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                           : isFailed
-                          ? "border-red-500 bg-red-500/10"
+                          ? "border-red-500 bg-red-500/15 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
                           : "border-zinc-700 bg-zinc-900"
                       }`}
                     >
@@ -246,11 +264,13 @@ export default function DemoPage() {
                     {/* Content */}
                     <div className="flex-1 pt-2">
                       <h3
-                        className={`font-semibold ${
+                        className={`font-semibold transition-colors duration-200 ${
                           isActive
                             ? "text-emerald-400"
                             : isCompleted
                             ? "text-zinc-100"
+                            : isFailed
+                            ? "text-red-400"
                             : "text-zinc-500"
                         }`}
                       >
@@ -269,8 +289,8 @@ export default function DemoPage() {
                             exit={{ opacity: 0, height: 0 }}
                             className="mt-3"
                           >
-                            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                              <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono">
+                            <div className="rounded-lg border border-zinc-800 bg-[#0a0a0f] p-4">
+                              <pre className="text-[13px] leading-relaxed text-zinc-300 whitespace-pre-wrap font-mono" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
                                 {stepDetails[step.id]}
                               </pre>
                             </div>

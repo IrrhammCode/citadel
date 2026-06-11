@@ -59,16 +59,16 @@ export function Sidebar() {
               <Link
                 href={href}
                 className={cn(
-                  "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   active
                     ? "text-emerald-400"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
+                    : "text-zinc-400 hover:bg-zinc-900/50 hover:text-zinc-100",
                 )}
               >
                 {active && (
                   <motion.span
                     layoutId="sidebar-active"
-                    className="absolute inset-0 rounded-lg bg-emerald-600/10"
+                    className="absolute inset-0 rounded-lg bg-emerald-500/10"
                     transition={{ type: "spring", stiffness: 350, damping: 30 }}
                   />
                 )}
@@ -88,6 +88,7 @@ export function Sidebar() {
       >
         <p className="text-xs text-zinc-500">MetaMask Smart Accounts Kit</p>
         <p className="text-xs text-zinc-600">ERC-7715 · Venice AI · Sepolia</p>
+        <p className="mt-2 text-[11px] text-zinc-700">v0.1.0</p>
       </motion.div>
     </motion.aside>
   );

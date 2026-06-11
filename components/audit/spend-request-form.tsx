@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,7 +109,7 @@ export function SpendRequestForm({ system }: Props) {
               execution.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <AnimatePresence>
               {!permission && (
                 <motion.div
@@ -123,15 +124,19 @@ export function SpendRequestForm({ system }: Props) {
               )}
             </AnimatePresence>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <motion.div
                 className="space-y-2"
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 }}
               >
-                <Label>Amount (USDC)</Label>
-                <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <Label className="text-xs font-medium uppercase tracking-wider text-zinc-400">Amount (USDC)</Label>
+                <Input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="h-10 border-zinc-700 bg-zinc-900/50 text-sm transition-colors focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20"
+                />
               </motion.div>
               <motion.div
                 className="space-y-2"
@@ -139,22 +144,37 @@ export function SpendRequestForm({ system }: Props) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.15 }}
               >
-                <Label>Recipient</Label>
+                <Label className="text-xs font-medium uppercase tracking-wider text-zinc-400">Recipient</Label>
                 <Input
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
-                  className="font-mono text-xs"
+                  className="h-10 border-zinc-700 bg-zinc-900/50 font-mono text-xs transition-colors focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20"
                 />
               </motion.div>
             </div>
             <div className="space-y-2">
-              <Label>Memo</Label>
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+              <Label className="text-xs font-medium uppercase tracking-wider text-zinc-400">Memo</Label>
+              <Input
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                className="h-10 border-zinc-700 bg-zinc-900/50 text-sm transition-colors focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20"
+              />
             </div>
 
             <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-              <Button onClick={submitSpend} disabled={loading || !permission} className="w-full sm:w-auto">
-                {loading ? "Venice AI auditing..." : "Submit for Compliance Audit"}
+              <Button
+                onClick={submitSpend}
+                disabled={loading || !permission}
+                className="w-full gap-2 bg-emerald-600 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-500 hover:shadow-emerald-500/30 disabled:opacity-50 sm:w-auto"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Venice AI auditing...
+                  </>
+                ) : (
+                  "Submit for Compliance Audit"
+                )}
               </Button>
             </motion.div>
 
@@ -164,9 +184,12 @@ export function SpendRequestForm({ system }: Props) {
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
+                  className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3"
                 >
                   <LoadingBar />
-                  <p className="mt-2 text-xs text-zinc-500">Analyzing policy compliance...</p>
+                  <p className="mt-2 text-xs font-medium text-emerald-400/80">
+                    Analyzing policy compliance via Venice AI...
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -214,10 +237,21 @@ export function SpendRequestForm({ system }: Props) {
                   Redeem ERC-7710 delegation via session account after Venice approval.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button onClick={executeApproved} disabled={executing}>
-                    {executing ? "Submitting transaction..." : "Execute via Delegation"}
+                  <Button
+                    onClick={executeApproved}
+                    disabled={executing}
+                    className="gap-2 bg-emerald-600 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-500 hover:shadow-emerald-500/30 disabled:opacity-50"
+                  >
+                    {executing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting transaction...
+                      </>
+                    ) : (
+                      "Execute via Delegation"
+                    )}
                   </Button>
                 </motion.div>
                 <AnimatePresence>

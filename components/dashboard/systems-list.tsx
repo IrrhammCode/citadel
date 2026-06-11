@@ -20,6 +20,13 @@ const statusVariant = {
   restricted: "warning" as const,
 };
 
+function getTrustColor(score: number) {
+  if (score >= 80) return { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30", label: "Elite" };
+  if (score >= 60) return { bg: "bg-green-500/15", text: "text-green-400", border: "border-green-500/30", label: "Trusted" };
+  if (score >= 40) return { bg: "bg-yellow-500/15", text: "text-yellow-400", border: "border-yellow-500/30", label: "Standard" };
+  return { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/30", label: "Restricted" };
+}
+
 export function SystemsList() {
   const { permissions, refresh } = usePermissions();
   const { systems } = useSystems();
@@ -48,8 +55,8 @@ export function SystemsList() {
               return (
                 <StaggerItem key={system.id}>
                   <motion.div
-                    whileHover={{ x: 4, borderColor: "rgba(16,185,129,0.2)" }}
-                    className="flex flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    whileHover={{ x: 4 }}
+                    className="group flex flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 transition-all duration-200 ease-out hover:border-emerald-500/20 hover:shadow-[0_0_24px_rgba(16,185,129,0.07)] sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-start gap-3">
                       <motion.div
@@ -65,6 +72,11 @@ export function SystemsList() {
                             {system.status}
                           </Badge>
                           <TrustScoreBadge trustScore={trustScore} compact />
+                          {trustScore !== null && (
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${getTrustColor(trustScore.score).bg} ${getTrustColor(trustScore.score).text} ${getTrustColor(trustScore.score).border}`}>
+                              {getTrustColor(trustScore.score).label}
+                            </span>
+                          )}
                           {permission && (
                             <motion.div
                               initial={{ scale: 0.8, opacity: 0 }}
@@ -113,17 +125,22 @@ export function SystemsList() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <GrantPermissionModal
                         systemId={system.id}
                         systemName={system.name}
                         existingPermission={permission}
                         onGranted={refresh}
                       />
-                      <Button variant="outline" size="sm" asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="group/btn border-zinc-700 transition-colors duration-200 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+                      >
                         <Link href={`/systems/${system.id}`}>
                           Open Agent
-                          <ArrowRight className="h-3 w-3" />
+                          <ArrowRight className="h-3 w-3 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
                         </Link>
                       </Button>
                     </div>

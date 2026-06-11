@@ -60,6 +60,7 @@ export default function AIBillingPage() {
 
   const remaining = budget - totalSpent;
   const usagePercent = (totalSpent / budget) * 100;
+  const isLowBudget = (remaining / budget) * 100 < 20;
 
   return (
     <AppShell
@@ -106,18 +107,19 @@ export default function AIBillingPage() {
                       inferences.slice(0, 10).map((record) => (
                         <motion.div
                           key={record.id}
-                          whileHover={{ x: 4 }}
-                          className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 p-3"
+                          whileHover={{ x: 4, borderColor: "rgba(16, 185, 129, 0.3)", backgroundColor: "rgba(16, 185, 129, 0.04)" }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 p-3 cursor-pointer"
                         >
                           <div className="flex items-center gap-3">
                             <Cpu className="h-4 w-4 text-zinc-500" />
                             <div>
                               <p className="text-sm font-medium text-zinc-200">{record.model}</p>
-                              <p className="text-xs text-zinc-500">{record.tokens} tokens • {record.systemId}</p>
+                              <p className="font-mono text-[13px] text-zinc-500">{record.tokens} tokens · <span className="text-zinc-400">{record.systemId}</span></p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-semibold text-zinc-100">{record.cost.toFixed(4)} USDC</p>
+                            <p className="font-mono text-sm font-semibold text-zinc-100">{record.cost.toFixed(4)} <span className="text-zinc-500">USDC</span></p>
                             <Badge
                               variant={record.authMethod === "x402" ? "default" : "secondary"}
                               className="text-[10px]"
@@ -152,40 +154,53 @@ export default function AIBillingPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col items-center justify-center py-6">
-                  <div className="relative flex h-32 w-32 items-center justify-center rounded-full border-[4px] border-emerald-900/50">
+                  <div className={`relative flex h-32 w-32 items-center justify-center rounded-full border-[4px] ${isLowBudget ? "border-red-900/60" : "border-emerald-900/50"}`}>
                     <svg className="absolute inset-0 h-full w-full -rotate-90">
+                      {/* Background track */}
                       <circle
                         cx="60"
                         cy="60"
                         r="58"
                         fill="none"
-                        stroke={usagePercent > 80 ? "rgba(239, 68, 68, 1)" : "rgba(16, 185, 129, 1)"}
+                        stroke={isLowBudget ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.08)"}
+                        strokeWidth="4"
+                      />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="58"
+                        fill="none"
+                        stroke={isLowBudget ? "#ef4444" : "#10b981"}
                         strokeWidth="4"
                         strokeDasharray="364"
                         strokeDashoffset={364 - (364 * usagePercent) / 100}
+                        strokeLinecap="round"
                         className="transition-all duration-1000 ease-in-out"
                       />
                     </svg>
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-zinc-100">
+                      <p className={`text-2xl font-bold ${isLowBudget ? "text-red-400" : "text-emerald-400"}`}>
                         {remaining.toFixed(1)}
                       </p>
                       <p className="text-[10px] uppercase tracking-wide text-zinc-500">USDC Left</p>
                     </div>
                   </div>
+                  {isLowBudget && (
+                    <p className="mt-2 text-xs text-red-400/80">Budget critically low</p>
+                  )}
                   
                   <div className="mt-8 w-full space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-zinc-400">Total Delegated</span>
-                      <span className="font-semibold text-zinc-100">{budget.toFixed(2)} USDC</span>
+                      <span className="font-mono font-semibold text-zinc-100">{budget.toFixed(2)} USDC</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-zinc-400">Spent on Inference</span>
-                      <span className="font-semibold text-zinc-100">{totalSpent.toFixed(4)} USDC</span>
+                      <span className="font-mono font-semibold text-zinc-100">{totalSpent.toFixed(4)} USDC</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-zinc-400">Inferences</span>
-                      <span className="font-semibold text-zinc-100">{inferences.length}</span>
+                      <span className="font-mono font-semibold text-zinc-100">{inferences.length}</span>
                     </div>
                   </div>
                 </div>

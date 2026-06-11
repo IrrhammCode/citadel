@@ -28,7 +28,7 @@ export function AuditLogTable() {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-12 text-center"
+        className="rounded-xl border border-zinc-800 bg-[#111118] p-12 text-center"
       >
         <motion.p
           animate={{ opacity: [0.5, 1, 0.5] }}
@@ -53,63 +53,93 @@ export function AuditLogTable() {
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Time</TableHead>
-          <TableHead>System</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Decision</TableHead>
-          <TableHead>Reasoning</TableHead>
-          <TableHead>Tx</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {records.map((record, index) => (
-            <motion.tr
-              key={record.id}
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05, duration: 0.35 }}
-              whileHover={{ backgroundColor: "rgba(24,24,27,0.5)" }}
-              className="border-b border-zinc-800/60 transition-colors hover:bg-zinc-900/50"
-            >
-              <TableCell className="text-xs text-zinc-400">
-                {new Date(record.timestamp).toLocaleString()}
-              </TableCell>
-              <TableCell>{record.systemName}</TableCell>
-              <TableCell>
-                {record.spendRequest.amount} {record.spendRequest.token}
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    record.verdict.decision === "approved" ? "default" : "destructive"
-                  }
-                >
-                  {record.verdict.decision}
-                </Badge>
-              </TableCell>
-              <TableCell className="max-w-xs truncate text-xs text-zinc-400">
-                {record.verdict.reasoning}
-              </TableCell>
-              <TableCell className="font-mono text-xs">
-                {record.txHash ? (
-                  <a
-                    href={`https://sepolia.etherscan.io/tx/${record.txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:underline"
+    <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#111118]">
+      <Table className="min-w-[720px]">
+        <TableHeader>
+          <TableRow className="border-b border-zinc-800 hover:bg-transparent">
+            <TableHead className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Time
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-zinc-500">
+              System
+            </TableHead>
+            <TableHead className="text-right text-[11px] uppercase tracking-wider text-zinc-500">
+              Amount
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Decision
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Reasoning
+            </TableHead>
+            <TableHead className="text-[11px] uppercase tracking-wider text-zinc-500">
+              Tx
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {records.map((record, index) => {
+            const isApproved = record.verdict.decision === "approved";
+            return (
+              <motion.tr
+                key={record.id}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05, duration: 0.35 }}
+                className={`
+                  border-b border-[#1e1e22] transition-colors
+                  hover:bg-zinc-900/50
+                  ${isApproved ? "bg-emerald-500/[0.03]" : "bg-red-500/[0.03]"}
+                `}
+              >
+                <TableCell className="whitespace-nowrap text-xs text-zinc-400">
+                  {new Date(record.timestamp).toLocaleString()}
+                </TableCell>
+                <TableCell className="font-mono text-[13px] text-zinc-300">
+                  {record.systemName}
+                </TableCell>
+                <TableCell className="text-right font-mono text-[13px] text-zinc-200">
+                  {record.spendRequest.amount} {record.spendRequest.token}
+                </TableCell>
+                <TableCell>
+                  <span
+                    className={`
+                      inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5
+                      text-[11px] font-medium uppercase tracking-wide
+                      ${isApproved
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                        : "bg-red-500/15 text-red-400 border border-red-500/30"
+                      }
+                    `}
                   >
-                    {record.txHash.slice(0, 8)}...
-                  </a>
-                ) : (
-                  "—"
-                )}
-              </TableCell>
-            </motion.tr>
-        ))}
-      </TableBody>
-    </Table>
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${isApproved ? "bg-emerald-400" : "bg-red-400"}`}
+                    />
+                    {record.verdict.decision}
+                  </span>
+                </TableCell>
+                <TableCell className="max-w-xs truncate text-xs text-zinc-500">
+                  {record.verdict.reasoning}
+                </TableCell>
+                <TableCell className="font-mono text-[13px]">
+                  {record.txHash ? (
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${record.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      {record.txHash.slice(0, 8)}…
+                    </a>
+                  ) : (
+                    <span className="text-zinc-600">—</span>
+                  )}
+                </TableCell>
+              </motion.tr>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
