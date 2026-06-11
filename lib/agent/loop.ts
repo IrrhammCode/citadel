@@ -1,5 +1,7 @@
 import { think, type AgentState, type AgentDecision, type AgentAction } from "./brain";
 import { getKnowledgeForAgent } from "./knowledge";
+import { recordDecision, updateDecisionOutcome, getMemoryContext } from "./memory";
+import { AgentEventBus, emitAgentStarted, emitAgentStopped, emitAgentError, emitSpendRequest, emitSpendApproved, emitSpendBlocked, emitBudgetLow, emitKpiMet, emitKpiBehind, emitTrustChanged } from "./event-bus";
 
 // ─── Agent Loop ─────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ export class AgentLoop {
     }
 
     this.isRunning = true;
+    emitAgentStarted(this.systemId);
     console.log(`🚀 Agent ${this.systemId} started (interval: ${intervalMinutes}min)`);
 
     // Run first cycle immediately
@@ -57,12 +60,15 @@ export class AgentLoop {
       this.intervalId = null;
     }
     this.isRunning = false;
+    emitAgentStopped(this.systemId);
     console.log(`⏹️ Agent ${this.systemId} stopped`);
   }
 
   // ── Run Single Cycle ──────────────────────────────────────
 
   async runCycle(): Promise<AgentDecision | null> {
+    let decisionRecord: any = null;
+    
     try {
       this.cycleCount++;
       this.onCycleStart?.(this.systemId, this.cycleCount);
@@ -73,12 +79,41 @@ export class AgentLoop {
       // 2. THINK — decide actions
       const decision = await think(state);
 
-      // 3. ACT — execute actions
+      // 3. Record decision in memory
+      decisionRecord = recordDecision(
+        this.systemId,
+        this.cycleCount,
+        {
+          budget: state.budget,
+          kpis: state.kpis.map((k) => ({
+            name: k.name,
+            current: k.current,
+            target: k.target,
+            status: k.status,
+          })),
+        },
+        {
+          actions: decision.actions.map((a) => ({
+            type: a.type,
+            description: a.description,
+            amount: a.amount,
+            recipient: a.recipient,
+            confidence: a.confidence,
+          })),
+          reasoning: decision.reasoning,
+          confidence: decision.confidence,
+        },
+      );
+
+      // 4. ACT — execute actions
       for (const action of decision.actions) {
         await this.act(action);
       }
 
-      // 4. UPDATE — record cycle
+      // 5. Update state based on actions
+      await this.updateStateAfterActions(state, decision);
+
+      // 6. UPDATE — record cycle
       this.lastCycle = Date.now();
       this.onCycleComplete?.(this.systemId, decision);
 
@@ -91,8 +126,77 @@ export class AgentLoop {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.onError?.(this.systemId, err);
+      emitAgentError(this.systemId, err.message);
       console.error(`❌ Agent ${this.systemId} cycle failed:`, err);
       return null;
+    }
+  }
+
+  // ── Update State After Actions ────────────────────────────
+
+  private async updateStateAfterActions(state: AgentState, decision: AgentDecision) {
+    const { updateTrustScore, addActivity, addAnomaly, updateVendorProfile, getAuditLog } = await import("@/lib/storage");
+
+    // Update trust score based on decision confidence
+    const trustChange = decision.confidence > 0.8 ? 2 : decision.confidence > 0.6 ? 1 : -1;
+    const trustEvent = {
+      type: decision.confidence > 0.7 ? "success" as const : "suspicious" as const,
+      description: `Agent cycle ${this.cycleCount}: ${decision.actions.length} actions, confidence ${(decision.confidence * 100).toFixed(0)}%`,
+      points: trustChange,
+      timestamp: Date.now(),
+    };
+    const newTrustScore = updateTrustScore(this.systemId, trustEvent);
+    emitTrustChanged(this.systemId, trustChange, newTrustScore.score);
+
+    // Check budget thresholds
+    const budgetUsage = state.budget.spent / state.budget.total;
+    if (budgetUsage > 0.9) {
+      emitBudgetLow(this.systemId, state.budget.remaining, state.budget.total * 0.1);
+    }
+
+    // Check KPI status
+    for (const kpi of state.kpis) {
+      if (kpi.status === "met") {
+        emitKpiMet(this.systemId, kpi.name, kpi.current, kpi.target);
+      } else if (kpi.status === "behind") {
+        emitKpiBehind(this.systemId, kpi.name, kpi.current, kpi.target);
+      }
+    }
+
+    // Record activity for each action
+    for (const action of decision.actions) {
+      addActivity({
+        systemId: this.systemId,
+        systemName: state.systemName,
+        type: "execution",
+        message: `${action.type}: ${action.description}`,
+        severity: "info",
+        metadata: {
+          confidence: decision.confidence,
+          reasoning: action.reasoning,
+          amount: action.amount,
+        },
+      });
+
+      // Update vendor profile if spend action
+      if (action.type === "spend" && action.recipient && action.amount) {
+        updateVendorProfile(action.recipient, action.amount);
+      }
+    }
+
+    // Check for anomalies
+    if (decision.actions.some((a) => a.type === "spend" && a.amount && a.amount > state.budget.remaining * 0.5)) {
+      addAnomaly({
+        id: crypto.randomUUID(),
+        systemId: this.systemId,
+        type: "amount_spike",
+        description: `Agent requested spend > 50% of remaining budget`,
+        severity: "high",
+        amount: decision.actions.find((a) => a.type === "spend")?.amount || 0,
+        recipient: decision.actions.find((a) => a.type === "spend")?.recipient || "",
+        timestamp: Date.now(),
+        resolved: false,
+      });
     }
   }
 
@@ -100,7 +204,7 @@ export class AgentLoop {
 
   private async observe(): Promise<AgentState> {
     // Get system data from storage
-    const { getAuditLog, getTrustScore, getPermissionForSystem } = await import("@/lib/storage");
+    const { getAuditLog, getTrustScore, getPermissionForSystem, getAllVendors, getAnomalies, getActivity } = await import("@/lib/storage");
     const { AUTONOMOUS_SYSTEMS } = await import("@/types/system");
 
     const system = AUTONOMOUS_SYSTEMS.find((s) => s.id === this.systemId);
@@ -114,8 +218,36 @@ export class AgentLoop {
 
     const permission = getPermissionForSystem(this.systemId);
 
-    // Get knowledge base
+    // Get knowledge base + memory context
     const knowledge = getKnowledgeForAgent(this.systemId);
+    const memoryContext = getMemoryContext(this.systemId);
+
+    // Get vendor profiles for context
+    const vendors = getAllVendors();
+    const topVendors = vendors
+      .sort((a, b) => b.transactionCount - a.transactionCount)
+      .slice(0, 5);
+
+    // Get recent anomalies
+    const anomalies = getAnomalies(this.systemId).filter((a) => !a.resolved);
+
+    // Get recent activity
+    const recentActivity = getActivity(10);
+
+    // Build market context from vendors and anomalies
+    let marketContext = "";
+    if (topVendors.length > 0) {
+      marketContext += "TOP VENDORS:\n";
+      for (const v of topVendors) {
+        marketContext += `- ${v.name}: ${v.transactionCount} txs, avg ${v.averageAmount.toFixed(2)} USDC, risk: ${v.riskLevel}\n`;
+      }
+    }
+    if (anomalies.length > 0) {
+      marketContext += "\nACTIVE ANOMALIES:\n";
+      for (const a of anomalies.slice(0, 3)) {
+        marketContext += `- ${a.type}: ${a.description} (severity: ${a.severity})\n`;
+      }
+    }
 
     // Build state
     const state: AgentState = {
@@ -156,7 +288,8 @@ export class AgentLoop {
         timestamp: a.timestamp,
         decision: a.verdict.decision,
       })),
-      knowledge,
+      knowledge: [...knowledge, ...memoryContext],
+      marketContext: marketContext || undefined,
     };
 
     return state;
@@ -197,32 +330,76 @@ export class AgentLoop {
       return;
     }
 
+    // Emit spend request event
+    emitSpendRequest(this.systemId, action.amount, action.recipient, action.memo || "");
+
     // In production, this would submit to the audit API
     console.log(`💰 Agent ${this.systemId}: Spending ${action.amount} USDC to ${action.recipient}`, {
       memo: action.memo,
       reasoning: action.reasoning,
     });
 
-    // Simulate submission
-    // In real app: await submitSpendRequest(this.systemId, action.amount, action.recipient, action.memo);
+    // Simulate approval (in real app, this would go through Venice AI audit)
+    const approved = action.confidence > 0.7;
+    if (approved) {
+      emitSpendApproved(this.systemId, action.amount, action.recipient, "0x" + crypto.randomUUID().replace(/-/g, "").slice(0, 64));
+    } else {
+      emitSpendBlocked(this.systemId, action.amount, action.recipient, "Low confidence decision");
+    }
   }
 
   // ── Execute Negotiate ─────────────────────────────────────
 
   private async executeNegotiate(action: AgentAction) {
     console.log(`🤝 Agent ${this.systemId}: Negotiating — ${action.description}`);
+    
+    // In production, this would initiate negotiation with another agent
+    const bus = AgentEventBus.getInstance();
+    await bus.emit({
+      type: "negotiate.request",
+      source: this.systemId,
+      data: {
+        description: action.description,
+        amount: action.amount,
+        reasoning: action.reasoning,
+      },
+    });
   }
 
   // ── Execute Report ────────────────────────────────────────
 
   private async executeReport(action: AgentAction) {
     console.log(`📊 Agent ${this.systemId}: Generating report — ${action.description}`);
+    
+    // In production, this would generate a real report
+    const { addActivity } = await import("@/lib/storage");
+    const { AUTONOMOUS_SYSTEMS } = await import("@/types/system");
+    const system = AUTONOMOUS_SYSTEMS.find((s) => s.id === this.systemId);
+    
+    addActivity({
+      systemId: this.systemId,
+      systemName: system?.name || this.systemId,
+      type: "report",
+      message: `Report generated: ${action.description}`,
+      severity: "success",
+    });
   }
 
   // ── Execute Onboard Vendor ────────────────────────────────
 
   private async executeOnboardVendor(action: AgentAction) {
     console.log(`👤 Agent ${this.systemId}: Onboarding vendor — ${action.description}`);
+    
+    // In production, this would onboard a new vendor
+    const bus = AgentEventBus.getInstance();
+    await bus.emit({
+      type: "vendor.new",
+      source: this.systemId,
+      data: {
+        description: action.description,
+        recipient: action.recipient,
+      },
+    });
   }
 
   // ── Getters ───────────────────────────────────────────────

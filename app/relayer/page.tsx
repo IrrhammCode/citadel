@@ -1,17 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Zap, Server, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Zap, Server, ShieldCheck, RefreshCw, Activity, CheckCircle2, XCircle } from "lucide-react";
 import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
+import { getRecentDecisions } from "@/lib/agent/memory";
+import { AgentEventBus } from "@/lib/agent/event-bus";
+
+type RelayStats = {
+  totalRelayed: number;
+  successful: number;
+  failed: number;
+  gasSaved: number;
+  usdcPaidForGas: number;
+};
 
 export default function RelayerPage() {
   const [use1Shot, setUse1Shot] = useState(true);
   const [sponsorGas, setSponsorGas] = useState(false);
+  const [stats, setStats] = useState<RelayStats>({
+    totalRelayed: 0,
+    successful: 0,
+    failed: 0,
+    gasSaved: 0,
+    usdcPaidForGas: 0,
+  });
+  const [recentTxs, setRecentTxs] = useState<any[]>([]);
+
+  // Load relay data
+  useEffect(() => {
+    loadRelayData();
+    
+    // Listen for events
+    const bus = AgentEventBus.getInstance();
+    const handler = () => loadRelayData();
+    bus.on("spend.approved", handler);
+    bus.on("agent.error", handler);
+    
+    return () => {
+      bus.off("spend.approved", handler);
+      bus.off("agent.error", handler);
+    };
+  }, []);
+
+  function loadRelayData() {
+    const decisions = getRecentDecisions(50);
+    
+    // Calculate stats from decisions
+    const totalRelayed = decisions.length;
+    const successful = decisions.filter((d) => d.outcome?.success !== false).length;
+    const failed = totalRelayed - successful;
+    const gasSaved = successful * 0.0003; // Estimated ETH saved per tx
+    const usdcPaidForGas = successful * 0.15; // Estimated USDC for gas
+    
+    setStats({ totalRelayed, successful, failed, gasSaved, usdcPaidForGas });
+    
+    // Build recent transactions
+    const txs = decisions.slice(0, 10).map((d) => ({
+      id: d.id,
+      systemId: d.systemId,
+      action: d.decision.actions[0]?.type || "unknown",
+      status: d.outcome?.success !== false ? "confirmed" : "failed",
+      timestamp: d.timestamp,
+      hash: d.outcome?.txHash || "0x" + d.id.slice(0, 8),
+    }));
+    
+    setRecentTxs(txs);
+  }
 
   return (
     <AppShell
@@ -20,6 +80,7 @@ export default function RelayerPage() {
     >
       <div className="grid gap-6 md:grid-cols-2">
         <Stagger className="space-y-6" stagger={0.1}>
+          {/* 1Shot Relayer */}
           <StaggerItem>
             <Card>
               <CardHeader>
@@ -46,13 +107,24 @@ export default function RelayerPage() {
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-zinc-800 pt-3">
                     <span className="text-sm font-medium text-zinc-300">Endpoint</span>
-                    <span className="font-mono text-xs text-zinc-500">https://api.1shot.xyz/v1/relay</span>
+                    <span className="font-mono text-xs text-zinc-500">https://relayer.1shotapi.com/v1/rpc</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-zinc-800 pt-3">
+                    <span className="text-sm font-medium text-zinc-300">Supported Chains</span>
+                    <div className="flex gap-1">
+                      {["ETH", "Base", "Arb", "OP"].map((chain) => (
+                        <Badge key={chain} variant="outline" className="text-[10px]">
+                          {chain}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </StaggerItem>
 
+          {/* Gas Sponsorship */}
           <StaggerItem>
             <Card className={use1Shot ? "opacity-100 transition-opacity" : "opacity-50 pointer-events-none transition-opacity"}>
               <CardHeader>
@@ -80,30 +152,72 @@ export default function RelayerPage() {
           </StaggerItem>
         </Stagger>
 
+        {/* Execution Metrics */}
         <FadeIn delay={0.3}>
           <Card className="h-full border-emerald-900/30 bg-emerald-950/5">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ShieldCheck className="h-5 w-5 text-emerald-400" />
-                Execution Metrics
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                  Execution Metrics
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={loadRelayData}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
               <CardDescription>
                 Overview of relayed transaction performance.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4">
+              <div className="grid gap-4 mb-6">
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wider">Total Relayed (1Shot)</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">142 Tx</p>
+                  <p className="mt-1 text-2xl font-semibold text-zinc-100">{stats.totalRelayed} Tx</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Successful</p>
+                    <p className="mt-1 text-xl font-semibold text-emerald-400">{stats.successful}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">Failed</p>
+                    <p className="mt-1 text-xl font-semibold text-red-400">{stats.failed}</p>
+                  </div>
                 </div>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wider">Gas Saved (Sponsorship)</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">0.045 ETH</p>
+                  <p className="mt-1 text-2xl font-semibold text-zinc-100">{stats.gasSaved.toFixed(3)} ETH</p>
                 </div>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wider">USDC Paid for Gas</p>
-                  <p className="mt-1 text-2xl font-semibold text-zinc-100">$ 12.50</p>
+                  <p className="mt-1 text-2xl font-semibold text-zinc-100">${stats.usdcPaidForGas.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Recent Transactions */}
+              <div>
+                <h3 className="text-sm font-medium text-zinc-300 mb-3">Recent Transactions</h3>
+                <div className="space-y-2">
+                  {recentTxs.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 p-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        {tx.status === "confirmed" ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-400" />
+                        )}
+                        <div>
+                          <p className="text-xs font-medium text-zinc-200">{tx.systemId}</p>
+                          <p className="text-[10px] text-zinc-500">{tx.action}</p>
+                        </div>
+                      </div>
+                      <span className="font-mono text-[10px] text-zinc-500">{tx.hash.slice(0, 10)}...</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </CardContent>
