@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { getVeniceX402Client, veniceX402Chat } from "@/lib/venice/x402";
+import { searchVendor, checkAddressReputation } from "@/lib/venice/search";
+import { getMemoryContext } from "./memory";
+import { AgentEventBus } from "./event-bus";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -91,7 +95,29 @@ function getVeniceClient() {
 // ─── Agent Brain ────────────────────────────────────────────
 
 export async function think(state: AgentState): Promise<AgentDecision> {
+  // Try x402 wallet auth first, fall back to API key
   const client = getVeniceClient();
+  let useX402 = false;
+  
+  try {
+    // Check if x402 is available
+    getVeniceX402Client();
+    useX402 = true;
+  } catch {
+    // Fall back to API key
+  }
+  
+  // Enrich state with vendor research via Venice Web Search
+  const enrichedState = await enrichStateWithResearch(state);
+  
+  // Get memory context
+  const memoryContext = getMemoryContext(state.systemId);
+  if (memoryContext.length > 0) {
+    enrichedState.knowledge = [
+      ...(enrichedState.knowledge || []),
+      ...memoryContext,
+    ];
+  }
 
   const systemPrompt = `You are an autonomous AI treasury agent. Your job is to make intelligent spending and management decisions to achieve your goal while staying within budget and meeting KPIs.
 
@@ -136,15 +162,39 @@ RULES:
 
   const userPrompt = buildUserPrompt(state);
 
-  const response = await client.chat.completions.create({
-    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-    temperature: 0.2,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-  });
+  let response;
+  
+  if (useX402) {
+    // Use x402 wallet auth
+    try {
+      const content = await veniceX402Chat([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ]);
+      response = { choices: [{ message: { content } }] };
+    } catch {
+      // Fall back to API key
+      response = await client.chat.completions.create({
+        model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+    }
+  } else {
+    response = await client.chat.completions.create({
+      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+  }
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("Venice returned an empty response");
@@ -257,4 +307,45 @@ What would you do? Respond with JSON:
   if (!content) throw new Error("Venice returned an empty response");
 
   return JSON.parse(content);
+}
+
+// ─── Enrich State with Research ─────────────────────────────
+
+async function enrichStateWithResearch(state: AgentState): Promise<AgentState> {
+  const enriched = { ...state };
+  
+  // Research vendors in pending tasks
+  for (const task of enriched.pendingTasks) {
+    if (task.type === "vendor_onboard" && task.recipient) {
+      try {
+        const reputation = await checkAddressReputation(task.recipient);
+        if (reputation.reputation === "suspicious" || reputation.reputation === "malicious") {
+          enriched.marketContext = (enriched.marketContext || "") + 
+            `\nWARNING: Vendor ${task.recipient} has ${reputation.reputation} reputation: ${reputation.details}`;
+        }
+      } catch {
+        // Ignore research errors
+      }
+    }
+  }
+  
+  // Research vendors in recent transactions
+  const recentVendors = enriched.recentTransactions
+    .map((t) => t.recipient)
+    .filter((r, i, arr) => arr.indexOf(r) === i) // unique
+    .slice(0, 3); // limit to 3
+  
+  for (const vendor of recentVendors) {
+    try {
+      const result = await searchVendor(vendor);
+      if (result.found && result.riskLevel === "high") {
+        enriched.marketContext = (enriched.marketContext || "") + 
+          `\nVendor ${vendor.slice(0, 10)}... risk: ${result.riskLevel} - ${result.summary}`;
+      }
+    } catch {
+      // Ignore research errors
+    }
+  }
+  
+  return enriched;
 }

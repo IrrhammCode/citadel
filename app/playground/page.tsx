@@ -35,6 +35,7 @@ import {
   removeKnowledge,
   type KnowledgeItem,
 } from "@/lib/agent/knowledge";
+import { FileUpload } from "@/components/agent/file-upload";
 import {
   thinkQuick,
   type AgentState,
@@ -259,6 +260,17 @@ export default function PlaygroundPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* File Upload */}
+                    <div className="space-y-2">
+                      <Label>Upload Documents</Label>
+                      <FileUpload
+                        systemId={selectedSystem}
+                        onUploadComplete={() => {
+                          setKnowledge(getKnowledgeItems(selectedSystem));
+                        }}
+                      />
+                    </div>
+
                     {/* Text Knowledge */}
                     <div className="space-y-2">
                       <Label>Text Knowledge</Label>
