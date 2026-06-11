@@ -7,44 +7,427 @@ import {
   COMPLIANCE_SYSTEM_PROMPT,
 } from "@/lib/venice/prompts";
 
-const verdictSchema = z.object({
-  decision: z.enum(["approved", "blocked"]),
-  confidence: z.number().min(0).max(1),
-  reasoning: z.string().min(1),
-  flags: z.array(z.string()),
-});
+// ─── Venice AI Response Types ───────────────────────────────
+
+export interface VeniceMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface VeniceChatChoice {
+  index: number;
+  message: VeniceMessage;
+  finish_reason: "stop" | "length" | "content_filter" | null;
+}
+
+export interface VeniceUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface VeniceChatResponse {
+  id: string;
+  object: "chat.completion";
+  created: number;
+  model: string;
+  choices: VeniceChatChoice[];
+  usage: VeniceUsage;
+}
+
+export interface VeniceError {
+  error: {
+    message: string;
+    type: string;
+    code: string | null;
+  };
+}
+
+export interface VeniceSearchResult {
+  found: boolean;
+  riskLevel: "low" | "medium" | "high";
+  summary: string;
+  sources: string[];
+}
+
+export interface VeniceComplianceVerdict {
+  decision: "approved" | "blocked";
+  confidence: number;
+  reasoning: string;
+  flags: string[];
+}
+
+export interface VeniceChatOptions {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  responseFormat?: { type: "json_object" | "text" };
+  messages: VeniceMessage[];
+  /** Skip cache for this request */
+  skipCache?: boolean;
+}
+
+// ─── Cache ──────────────────────────────────────────────────
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttlMs: number;
+}
+
+class ResponseCache {
+  private cache = new Map<string, CacheEntry<unknown>>();
+  private maxSize: number;
+  private defaultTtlMs: number;
+
+  constructor(maxSize = 500, defaultTtlMs = 5 * 60 * 1000) {
+    this.maxSize = maxSize;
+    this.defaultTtlMs = defaultTtlMs;
+  }
+
+  private makeKey(messages: VeniceMessage[], model: string): string {
+    const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
+    // Simple hash: combine model + content length + first/last 100 chars
+    const hash = `${model}:${content.length}:${content.slice(0, 100)}:${content.slice(-100)}`;
+    return hash;
+  }
+
+  get<T>(messages: VeniceMessage[], model: string): T | null {
+    const key = this.makeKey(messages, model);
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > entry.ttlMs) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  set<T>(messages: VeniceMessage[], model: string, data: T, ttlMs?: number): void {
+    // Evict oldest entries if at capacity
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
+    const key = this.makeKey(messages, model);
+    this.cache.set(key, { data, timestamp: Date.now(), ttlMs: ttlMs ?? this.defaultTtlMs });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
+// ─── Retry Logic ────────────────────────────────────────────
+
+interface RetryOptions {
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  retryableStatuses: number[];
+}
+
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 30000,
+  retryableStatuses: [429, 500, 502, 503, 504],
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function calculateBackoff(attempt: number, opts: RetryOptions): number {
+  const exponential = opts.baseDelayMs * Math.pow(2, attempt);
+  const jitter = exponential * (0.5 + Math.random() * 0.5);
+  return Math.min(jitter, opts.maxDelayMs);
+}
+
+// ─── Venice AI Client ───────────────────────────────────────
+
+export class VeniceClient {
+  private openai: OpenAI;
+  private apiKey: string;
+  private baseURL: string;
+  private cache: ResponseCache;
+  private retryOptions: RetryOptions;
+
+  constructor(options?: {
+    apiKey?: string;
+    baseURL?: string;
+    cacheMaxSize?: number;
+    cacheTtlMs?: number;
+    retryOptions?: Partial<RetryOptions>;
+  }) {
+    this.apiKey = options?.apiKey ?? process.env.VENICE_API_KEY ?? "";
+    this.baseURL = options?.baseURL ?? "https://api.venice.ai/api/v1";
+
+    if (!this.apiKey) {
+      throw new VeniceClientError(
+        "VENICE_API_KEY environment variable is not set. Configure it in your .env file.",
+        "AUTH_MISSING",
+      );
+    }
+
+    this.openai = new OpenAI({
+      apiKey: this.apiKey,
+      baseURL: this.baseURL,
+    });
+
+    this.cache = new ResponseCache(
+      options?.cacheMaxSize ?? 500,
+      options?.cacheTtlMs ?? 5 * 60 * 1000,
+    );
+
+    this.retryOptions = { ...DEFAULT_RETRY_OPTIONS, ...options?.retryOptions };
+  }
+
+  // ─── Core Chat Completion ───────────────────────────────
+
+  async chat(options: VeniceChatOptions): Promise<VeniceChatResponse> {
+    const model = options.model ?? process.env.VENICE_MODEL ?? "llama-3.3-70b";
+
+    // Check cache (skip for json_object responses that may vary)
+    if (!options.skipCache && !options.responseFormat) {
+      const cached = this.cache.get<VeniceChatResponse>(options.messages, model);
+      if (cached) return cached;
+    }
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= this.retryOptions.maxRetries; attempt++) {
+      try {
+        const response = await this.openai.chat.completions.create({
+          model,
+          temperature: options.temperature ?? 0.1,
+          max_tokens: options.maxTokens,
+          response_format: options.responseFormat,
+          messages: options.messages,
+        });
+
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new VeniceClientError(
+            "Venice returned an empty response. The model may have refused the request.",
+            "EMPTY_RESPONSE",
+          );
+        }
+
+        const result: VeniceChatResponse = {
+          id: response.id,
+          object: "chat.completion",
+          created: response.created,
+          model: response.model,
+          choices: response.choices.map((c, i) => ({
+            index: i,
+            message: { role: "assistant", content: c.message?.content ?? "" },
+            finish_reason: c.finish_reason as VeniceChatChoice["finish_reason"],
+          })),
+          usage: {
+            prompt_tokens: response.usage?.prompt_tokens ?? 0,
+            completion_tokens: response.usage?.completion_tokens ?? 0,
+            total_tokens: response.usage?.total_tokens ?? 0,
+          },
+        };
+
+        // Cache successful responses
+        if (!options.skipCache && !options.responseFormat) {
+          this.cache.set(options.messages, model, result);
+        }
+
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Check if retryable
+        const statusCode = (error as { status?: number }).status;
+        const isRetryable =
+          statusCode && this.retryOptions.retryableStatuses.includes(statusCode);
+
+        if (!isRetryable || attempt === this.retryOptions.maxRetries) {
+          break;
+        }
+
+        const delay = calculateBackoff(attempt, this.retryOptions);
+        console.warn(
+          `[Venice] Retry ${attempt + 1}/${this.retryOptions.maxRetries} after ${delay}ms (status: ${statusCode})`,
+        );
+        await sleep(delay);
+      }
+    }
+
+    throw this.wrapError(lastError);
+  }
+
+  // ─── Chat Completion with JSON Parsing ──────────────────
+
+  async chatJSON<T>(
+    options: VeniceChatOptions & { schema?: z.ZodType<T> },
+  ): Promise<T> {
+    const response = await this.chat({
+      ...options,
+      responseFormat: { type: "json_object" },
+      skipCache: true, // JSON responses should not be cached by default
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new VeniceClientError("Empty response from Venice", "EMPTY_RESPONSE");
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      if (options.schema) {
+        return options.schema.parse(parsed);
+      }
+      return parsed as T;
+    } catch (parseError) {
+      // Retry once with explicit JSON instruction
+      const retryResponse = await this.chat({
+        ...options,
+        messages: [
+          ...options.messages,
+          { role: "user", content: "Respond with valid JSON only. No markdown fences." },
+        ],
+        responseFormat: { type: "json_object" },
+        skipCache: true,
+        temperature: 0,
+      });
+
+      const retryContent = retryResponse.choices[0]?.message?.content;
+      if (!retryContent) {
+        throw new VeniceClientError("Venice retry returned empty response", "EMPTY_RESPONSE");
+      }
+
+      try {
+        const retryParsed = JSON.parse(retryContent);
+        if (options.schema) {
+          return options.schema.parse(retryParsed);
+        }
+        return retryParsed as T;
+      } catch {
+        throw new VeniceClientError(
+          `Failed to parse Venice JSON response: ${retryContent.slice(0, 200)}`,
+          "PARSE_ERROR",
+        );
+      }
+    }
+  }
+
+  // ─── Health Check ───────────────────────────────────────
+
+  async healthCheck(): Promise<{ ok: boolean; latencyMs: number; model: string }> {
+    const start = Date.now();
+    try {
+      const response = await this.chat({
+        messages: [{ role: "user", content: "ping" }],
+        maxTokens: 5,
+        temperature: 0,
+      });
+      return {
+        ok: true,
+        latencyMs: Date.now() - start,
+        model: response.model,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - start,
+        model: "unknown",
+      };
+    }
+  }
+
+  // ─── Cache Management ───────────────────────────────────
+
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  cacheSize(): number {
+    return this.cache.size();
+  }
+
+  // ─── Error Handling ─────────────────────────────────────
+
+  private wrapError(error: Error | null): VeniceClientError {
+    if (error instanceof VeniceClientError) return error;
+
+    const status = (error as { status?: number }).status;
+    const message = error?.message ?? "Unknown Venice API error";
+
+    if (status === 401) {
+      return new VeniceClientError(
+        "Authentication failed. Check your VENICE_API_KEY.",
+        "AUTH_FAILED",
+        status,
+      );
+    }
+    if (status === 429) {
+      return new VeniceClientError(
+        "Rate limited by Venice AI. Please retry after a short delay.",
+        "RATE_LIMITED",
+        status,
+      );
+    }
+    if (status === 402) {
+      return new VeniceClientError(
+        "Insufficient credits on Venice AI account.",
+        "PAYMENT_REQUIRED",
+        status,
+      );
+    }
+    if (status && status >= 500) {
+      return new VeniceClientError(
+        `Venice AI server error (${status}): ${message}`,
+        "SERVER_ERROR",
+        status,
+      );
+    }
+
+    return new VeniceClientError(message, "UNKNOWN", status);
+  }
+}
+
+// ─── Custom Error Class ─────────────────────────────────────
+
+export class VeniceClientError extends Error {
+  code: string;
+  status?: number;
+
+  constructor(message: string, code: string, status?: number) {
+    super(message);
+    this.name = "VeniceClientError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+// ─── Singleton Client ───────────────────────────────────────
+
+let _client: VeniceClient | null = null;
 
 /**
- * Get Venice client — supports both API key and x402 wallet auth.
- * Priority: x402 wallet > API key
+ * Get or create the Venice client singleton.
+ * Uses VENICE_API_KEY env var. Throws if not configured.
  */
-function getVeniceClient() {
-  // Try x402 wallet auth first
-  const walletKey = process.env.X402_WALLET_KEY;
-  if (walletKey) {
-    // Use x402 auth via custom fetch
-    return new OpenAI({
-      apiKey: "x402", // placeholder, actual auth via custom headers
-      baseURL: "https://api.venice.ai/api/v1",
-    });
+export function getVeniceClient(): VeniceClient {
+  if (!_client) {
+    _client = new VeniceClient();
   }
-
-  // Fallback to API key
-  const apiKey = process.env.VENICE_API_KEY;
-  if (!apiKey) {
-    throw new Error("Neither X402_WALLET_KEY nor VENICE_API_KEY is configured");
-  }
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.venice.ai/api/v1",
-  });
+  return _client;
 }
 
 /**
- * Check if x402 auth is available
+ * Check if Venice is configured (has API key)
  */
-export function isX402Available(): boolean {
-  return !!process.env.X402_WALLET_KEY;
+export function isVeniceConfigured(): boolean {
+  return !!process.env.VENICE_API_KEY;
 }
 
 /**
@@ -54,6 +437,22 @@ export function getAuthMethod(): "x402" | "api_key" {
   return process.env.X402_WALLET_KEY ? "x402" : "api_key";
 }
 
+/**
+ * Check if x402 auth is available
+ */
+export function isX402Available(): boolean {
+  return !!process.env.X402_WALLET_KEY;
+}
+
+// ─── Zod Schemas ────────────────────────────────────────────
+
+const verdictSchema = z.object({
+  decision: z.enum(["approved", "blocked"]),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1),
+  flags: z.array(z.string()),
+});
+
 function parseVerdict(raw: string): AuditVerdict {
   const trimmed = raw.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
@@ -62,47 +461,23 @@ function parseVerdict(raw: string): AuditVerdict {
   return parsed;
 }
 
-// ─── Compliance Audit (Original) ────────────────────────────
+// ─── Compliance Audit ───────────────────────────────────────
 
 export async function auditSpendRequest(
   body: AuditRequestBody,
 ): Promise<AuditVerdict> {
   const client = getVeniceClient();
 
-  const response = await client.chat.completions.create({
+  // Use chatJSON which handles retry, JSON parsing, and schema validation
+  return client.chatJSON({
     model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
     temperature: 0.1,
-    response_format: { type: "json_object" },
+    schema: verdictSchema,
     messages: [
       { role: "system", content: COMPLIANCE_SYSTEM_PROMPT },
       { role: "user", content: buildComplianceUserPrompt(body) },
     ],
   });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error("Venice returned an empty response");
-  }
-
-  try {
-    return parseVerdict(content);
-  } catch {
-    const retry = await client.chat.completions.create({
-      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-      temperature: 0,
-      messages: [
-        { role: "system", content: COMPLIANCE_SYSTEM_PROMPT },
-        { role: "user", content: buildComplianceUserPrompt(body) },
-        {
-          role: "user",
-          content: "Respond with JSON only. No markdown fences.",
-        },
-      ],
-    });
-    const retryContent = retry.choices[0]?.message?.content;
-    if (!retryContent) throw new Error("Venice retry returned empty response");
-    return parseVerdict(retryContent);
-  }
 }
 
 // ─── Enhanced: Compliance + Pattern + Anomaly ───────────────
@@ -242,35 +617,15 @@ Be conservative: when in doubt, block. Approved only when clearly within policy.
     2,
   );
 
-  const response = await client.chat.completions.create({
+  return client.chatJSON({
     model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
     temperature: 0.1,
-    response_format: { type: "json_object" },
+    schema: enhancedVerdictSchema,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
   });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error("Venice returned an empty response");
-
-  try {
-    return enhancedVerdictSchema.parse(JSON.parse(content));
-  } catch {
-    const retry = await client.chat.completions.create({
-      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-      temperature: 0,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-        { role: "user", content: "Respond with JSON only. No markdown fences." },
-      ],
-    });
-    const retryContent = retry.choices[0]?.message?.content;
-    if (!retryContent) throw new Error("Venice retry returned empty response");
-    return enhancedVerdictSchema.parse(JSON.parse(retryContent));
-  }
 }
 
 // ─── Spending Pattern Analysis ──────────────────────────────
@@ -303,10 +658,9 @@ Focus on:
 - Vendor concentration
 - Unusual patterns`;
 
-  const response = await client.chat.completions.create({
+  const response = await client.chat({
     model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
     temperature: 0.2,
-    response_format: { type: "json_object" },
     messages: [
       { role: "system", content: "You are a financial pattern analyst. Respond with JSON only." },
       { role: "user", content: prompt },
@@ -455,7 +809,7 @@ Write a professional, concise report with:
 
 Keep it under 300 words. Use bullet points. Be direct.`;
 
-  const response = await client.chat.completions.create({
+  const response = await client.chat({
     model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
     temperature: 0.3,
     messages: [
@@ -468,6 +822,12 @@ Keep it under 300 words. Use bullet points. Be direct.`;
 }
 
 // ─── Negotiation Verdict ────────────────────────────────────
+
+const negotiationResultSchema = z.object({
+  approved: z.boolean(),
+  reasoning: z.string(),
+  confidence: z.number().min(0).max(1),
+});
 
 export async function evaluateNegotiation(
   fromSystem: { name: string; trustScore: number; roi: number; budget: number; spent: number },
@@ -500,22 +860,99 @@ Respond with JSON:
 
 Consider: trust scores, ROI performance, reason quality, budget availability.`;
 
-  const response = await client.chat.completions.create({
-    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-    temperature: 0.1,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: "You are a treasury governance AI. Respond with JSON only." },
-      { role: "user", content: prompt },
-    ],
-  });
+  try {
+    return await client.chatJSON({
+      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+      temperature: 0.1,
+      schema: negotiationResultSchema,
+      messages: [
+        { role: "system", content: "You are a treasury governance AI. Respond with JSON only." },
+        { role: "user", content: prompt },
+      ],
+    });
+  } catch (error) {
+    return {
+      approved: false,
+      reasoning: `Negotiation evaluation failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      confidence: 0,
+    };
+  }
+}
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) return { approved: false, reasoning: "Venice returned empty", confidence: 0 };
+// ─── Vendor Web Search ──────────────────────────────────────
+
+export async function searchVendor(
+  vendorAddress: string,
+  vendorName?: string,
+): Promise<VeniceSearchResult> {
+  const client = getVeniceClient();
+
+  const query = vendorName
+    ? `"${vendorName}" company crypto blockchain legitimacy`
+    : `ethereum address ${vendorAddress} scam fraud legitimate`;
 
   try {
-    return JSON.parse(content);
-  } catch {
-    return { approved: false, reasoning: "Failed to parse Venice response", confidence: 0 };
+    const response = await client.chat({
+      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content: `You are a vendor risk analyst. Search for information about this vendor/address and assess risk.
+Respond with JSON:
+{
+  "found": true/false,
+  "riskLevel": "low" | "medium" | "high",
+  "summary": "what you found",
+  "sources": ["url1", "url2"]
+}
+
+Be conservative. If no information found, risk is "high".`,
+        },
+        {
+          role: "user",
+          content: `Search for: ${query}
+
+Vendor address: ${vendorAddress}
+${vendorName ? `Vendor name: ${vendorName}` : ""}`,
+        },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return { found: false, riskLevel: "high", summary: "No response from Venice", sources: [] };
+
+    try {
+      return JSON.parse(content) as VeniceSearchResult;
+    } catch {
+      return { found: false, riskLevel: "medium", summary: content.slice(0, 200), sources: [] };
+    }
+  } catch (error) {
+    return { found: false, riskLevel: "medium", summary: `Web search failed: ${error instanceof Error ? error.message : "unknown"}`, sources: [] };
   }
+}
+
+/**
+ * Check if an address is known to be suspicious
+ */
+export async function checkAddressReputation(address: string): Promise<{
+  isKnown: boolean;
+  reputation: "good" | "neutral" | "suspicious" | "malicious";
+  details: string;
+}> {
+  const result = await searchVendor(address);
+
+  if (!result.found) {
+    return { isKnown: false, reputation: "neutral", details: "No information found" };
+  }
+
+  if (result.riskLevel === "high") {
+    return { isKnown: true, reputation: "suspicious", details: result.summary };
+  }
+
+  if (result.riskLevel === "low") {
+    return { isKnown: true, reputation: "good", details: result.summary };
+  }
+
+  return { isKnown: true, reputation: "neutral", details: result.summary };
 }

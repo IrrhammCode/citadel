@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit, Play, Activity, Vote, Shield } from "lucide-react";
+import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit, Play, Activity, Vote, Shield, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/audit-log", label: "Audit Log", icon: ScrollText },
   { href: "/network", label: "Agent Network", icon: Network },
   { href: "/council", label: "Council", icon: Vote },
+  { href: "/defi", label: "DeFi", icon: TrendingUp },
   { href: "/relayer", label: "Gas & Relayer", icon: Zap },
   { href: "/billing", label: "AI Billing", icon: BrainCircuit },
 ];

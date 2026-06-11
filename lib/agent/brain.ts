@@ -4,6 +4,7 @@ import { getVeniceX402Client, veniceX402Chat } from "@/lib/venice/x402";
 import { searchVendor, checkAddressReputation } from "@/lib/venice/search";
 import { getMemoryContext } from "./memory";
 import { AgentEventBus } from "./event-bus";
+import { createHash } from "crypto";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ const decisionSchema = z.object({
 
 // ─── Venice Client ──────────────────────────────────────────
 
-function getVeniceClient() {
+function getVeniceClient(): OpenAI {
   const apiKey = process.env.VENICE_API_KEY;
   if (!apiKey) throw new Error("VENICE_API_KEY is not configured");
   return new OpenAI({
@@ -92,24 +93,100 @@ function getVeniceClient() {
   });
 }
 
+// ─── Retry Logic ────────────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxRetries: number = MAX_RETRIES,
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[brain] ${label} attempt ${attempt + 1} failed, retrying in ${Math.round(delay)}ms:`, lastError.message);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw new Error(`[brain] ${label} failed after ${maxRetries + 1} attempts: ${lastError?.message}`);
+}
+
+// ─── Decision Cache ─────────────────────────────────────────
+
+class DecisionCache {
+  private cache = new Map<string, { decision: AgentDecision; ts: number }>();
+  private readonly ttlMs: number;
+
+  constructor(ttlMinutes: number = 5) {
+    this.ttlMs = ttlMinutes * 60 * 1000;
+  }
+
+  private hash(state: AgentState): string {
+    const key = JSON.stringify({
+      systemId: state.systemId,
+      goal: state.goal,
+      budget: state.budget,
+      kpis: state.kpis,
+      pendingTasks: state.pendingTasks,
+      recentTransactions: state.recentTransactions.slice(-3),
+    });
+    return createHash("sha256").update(key).digest("hex").slice(0, 16);
+  }
+
+  get(state: AgentState): AgentDecision | null {
+    const key = this.hash(state);
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > this.ttlMs) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.decision;
+  }
+
+  set(state: AgentState, decision: AgentDecision): void {
+    const key = this.hash(state);
+    this.cache.set(key, { decision, ts: Date.now() });
+    // Evict old entries if cache grows too large
+    if (this.cache.size > 100) {
+      const oldest = Array.from(this.cache.entries()).sort((a, b) => a[1].ts - b[1].ts)[0];
+      if (oldest) this.cache.delete(oldest[0]);
+    }
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+const decisionCache = new DecisionCache(Number(process.env.BRAIN_CACHE_TTL_MINUTES) || 5);
+
+/** Clear the decision cache (e.g. after manual overrides or config changes) */
+export function clearDecisionCache(): void {
+  decisionCache.clear();
+}
+
 // ─── Agent Brain ────────────────────────────────────────────
 
 export async function think(state: AgentState): Promise<AgentDecision> {
-  // Try x402 wallet auth first, fall back to API key
-  const client = getVeniceClient();
-  let useX402 = false;
-  
-  try {
-    // Check if x402 is available
-    getVeniceX402Client();
-    useX402 = true;
-  } catch {
-    // Fall back to API key
+  // Check cache first to avoid redundant API calls
+  const cached = decisionCache.get(state);
+  if (cached) {
+    console.log("[brain] Returning cached decision");
+    return cached;
   }
-  
+
   // Enrich state with vendor research via Venice Web Search
   const enrichedState = await enrichStateWithResearch(state);
-  
+
   // Get memory context
   const memoryContext = getMemoryContext(state.systemId);
   if (memoryContext.length > 0) {
@@ -119,7 +196,110 @@ export async function think(state: AgentState): Promise<AgentDecision> {
     ];
   }
 
-  const systemPrompt = `You are an autonomous AI treasury agent. Your job is to make intelligent spending and management decisions to achieve your goal while staying within budget and meeting KPIs.
+  const systemPrompt = buildSystemPrompt();
+  const userPrompt = buildUserPrompt(enrichedState);
+
+  // Make the actual Venice AI API call with retry logic
+  const decision = await withRetry(
+    () => callVeniceAI(systemPrompt, userPrompt),
+    "think",
+  );
+
+  // Cache the result
+  decisionCache.set(state, decision);
+
+  return decision;
+}
+
+/**
+ * Call Venice AI API for a decision. Tries x402 wallet auth first,
+ * falls back to API key auth. Handles response parsing and validation.
+ */
+async function callVeniceAI(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<AgentDecision> {
+  const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: userPrompt },
+  ];
+
+  let rawContent: string;
+
+  // Try x402 wallet auth first, fall back to API key
+  try {
+    getVeniceX402Client();
+    rawContent = await veniceX402Chat(messages, model);
+  } catch {
+    // x402 not available — use API key client
+    const client = getVeniceClient();
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages,
+    });
+    rawContent = response.choices[0]?.message?.content ?? "";
+  }
+
+  if (!rawContent) {
+    throw new Error("Venice AI returned empty response");
+  }
+
+  // Parse and validate the response
+  return parseDecision(rawContent, systemPrompt, userPrompt);
+}
+
+/**
+ * Parse Venice AI response into a validated AgentDecision.
+ * If initial parse fails, retries with a stricter prompt.
+ */
+async function parseDecision(
+  rawContent: string,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<AgentDecision> {
+  // First attempt: parse the response directly
+  try {
+    const parsed = JSON.parse(rawContent);
+    return decisionSchema.parse(parsed);
+  } catch (parseErr) {
+    console.warn("[brain] Initial JSON parse failed, retrying with strict prompt:",
+      parseErr instanceof Error ? parseErr.message : parseErr);
+  }
+
+  // Second attempt: ask Venice to fix the JSON
+  const client = getVeniceClient();
+  const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
+
+  const fixResponse = await client.chat.completions.create({
+    model,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+      {
+        role: "user",
+        content: `The previous response was invalid JSON. Fix and return valid JSON only. Previous response:\n${rawContent.slice(0, 2000)}`,
+      },
+    ],
+  });
+
+  const fixContent = fixResponse.choices[0]?.message?.content;
+  if (!fixContent) {
+    throw new Error("Venice AI fix-up call returned empty response");
+  }
+
+  const parsed = JSON.parse(fixContent);
+  return decisionSchema.parse(parsed);
+}
+
+// ─── Build User Prompt ──────────────────────────────────────
+
+function buildSystemPrompt(): string {
+  return `You are an autonomous AI treasury agent. Your job is to make intelligent spending and management decisions to achieve your goal while staying within budget and meeting KPIs.
 
 CORE PRINCIPLES:
 1. Always stay within budget — never exceed remaining balance
@@ -159,67 +339,7 @@ RULES:
 - Total spend cannot exceed remaining budget
 - Confidence < 0.5 → use "wait" action instead
 - Always include reasoning for each action`;
-
-  const userPrompt = buildUserPrompt(state);
-
-  let response;
-  
-  if (useX402) {
-    // Use x402 wallet auth
-    try {
-      const content = await veniceX402Chat([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ]);
-      response = { choices: [{ message: { content } }] };
-    } catch {
-      // Fall back to API key
-      response = await client.chat.completions.create({
-        model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      });
-    }
-  } else {
-    response = await client.chat.completions.create({
-      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    });
-  }
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error("Venice returned an empty response");
-
-  try {
-    const parsed = JSON.parse(content);
-    return decisionSchema.parse(parsed);
-  } catch {
-    // Retry with stricter prompt
-    const retry = await client.chat.completions.create({
-      model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-      temperature: 0,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-        { role: "user", content: "Respond with JSON only. No markdown fences." },
-      ],
-    });
-    const retryContent = retry.choices[0]?.message?.content;
-    if (!retryContent) throw new Error("Venice retry returned empty response");
-    return decisionSchema.parse(JSON.parse(retryContent));
-  }
 }
-
-// ─── Build User Prompt ──────────────────────────────────────
 
 function buildUserPrompt(state: AgentState): string {
   const kpiSummary = state.kpis.map((k) => {
@@ -270,8 +390,6 @@ export async function thinkQuick(
   state: AgentState,
   scenario: string,
 ): Promise<{ action: AgentAction; reasoning: string }> {
-  const client = getVeniceClient();
-
   const prompt = `You are ${state.systemName}. Your goal: ${state.goal}.
 Budget: ${state.budget.remaining} USDC remaining.
 KPIs: ${state.kpis.map((k) => `${k.name}: ${k.current}/${k.target}`).join(", ")}
@@ -293,20 +411,32 @@ What would you do? Respond with JSON:
   "reasoning": "overall explanation"
 }`;
 
-  const response = await client.chat.completions.create({
-    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: "You are an autonomous treasury agent. Respond with JSON only." },
-      { role: "user", content: prompt },
-    ],
-  });
+  return withRetry(async () => {
+    let rawContent: string;
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error("Venice returned an empty response");
+    try {
+      getVeniceX402Client();
+      rawContent = await veniceX402Chat([
+        { role: "system", content: "You are an autonomous treasury agent. Respond with JSON only." },
+        { role: "user", content: prompt },
+      ]);
+    } catch {
+      const client = getVeniceClient();
+      const response = await client.chat.completions.create({
+        model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You are an autonomous treasury agent. Respond with JSON only." },
+          { role: "user", content: prompt },
+        ],
+      });
+      rawContent = response.choices[0]?.message?.content ?? "";
+    }
 
-  return JSON.parse(content);
+    if (!rawContent) throw new Error("Venice returned an empty response");
+    return JSON.parse(rawContent);
+  }, "thinkQuick");
 }
 
 // ─── Enrich State with Research ─────────────────────────────
