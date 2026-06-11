@@ -59,7 +59,18 @@ function getStore(): AgentMemoryStore {
   }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return { decisions: [], patterns: [], learnings: [], lastUpdated: 0 };
-  return JSON.parse(raw);
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      decisions: parsed.decisions || [],
+      patterns: parsed.patterns || [],
+      learnings: parsed.learnings || [],
+      lastUpdated: parsed.lastUpdated || 0,
+    };
+  } catch {
+    return { decisions: [], patterns: [], learnings: [], lastUpdated: 0 };
+  }
 }
 
 function saveStore(store: AgentMemoryStore) {
@@ -130,7 +141,8 @@ export function updateDecisionOutcome(
 
 export function getDecisions(systemId: string, limit: number = 50): DecisionRecord[] {
   const store = getStore();
-  return store.decisions
+  const decisions = store.decisions || [];
+  return [...decisions]
     .filter((d) => d.systemId === systemId)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, limit);
@@ -138,7 +150,8 @@ export function getDecisions(systemId: string, limit: number = 50): DecisionReco
 
 export function getRecentDecisions(limit: number = 20): DecisionRecord[] {
   const store = getStore();
-  return store.decisions
+  const decisions = store.decisions || [];
+  return [...decisions]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, limit);
 }
@@ -284,7 +297,8 @@ export function getAllPatterns() {
 
 export function getLearnings(systemId: string, limit: number = 20) {
   const store = getStore();
-  return store.learnings
+  const learnings = store.learnings || [];
+  return [...learnings]
     .filter((l) => l.systemId === systemId)
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, limit);
