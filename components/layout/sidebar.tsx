@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit, Play, Activity, Vote } from "lucide-react";
+import { LayoutDashboard, Bot, ScrollText, Network, Zap, BrainCircuit, Play, Activity, Vote, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/systems", label: "Systems", icon: Bot },
   { href: "/playground", label: "Playground", icon: BrainCircuit },
   { href: "/agent-dashboard", label: "Agent Control", icon: Activity },
+  { href: "/risk", label: "Risk", icon: Shield },
   { href: "/audit-log", label: "Audit Log", icon: ScrollText },
   { href: "/network", label: "Agent Network", icon: Network },
   { href: "/council", label: "Council", icon: Vote },
