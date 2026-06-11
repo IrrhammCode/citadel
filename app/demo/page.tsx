@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
@@ -18,12 +18,15 @@ import {
   Unlock,
   DollarSign,
   AlertTriangle,
+  Database,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
+import { seedDemoData } from "@/lib/demo/seed-data";
+import { toast } from "sonner";
 
 type DemoStep = {
   id: string;
@@ -37,6 +40,7 @@ type DemoStep = {
 export default function DemoPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [steps, setSteps] = useState<DemoStep[]>([
     {
       id: "connect",
@@ -81,6 +85,13 @@ export default function DemoPage() {
       status: "pending",
     },
     {
+      id: "blocked",
+      title: "Block Suspicious",
+      description: "Agent tries suspicious address, Venice blocks it",
+      icon: XCircle,
+      status: "pending",
+    },
+    {
       id: "result",
       title: "Result",
       description: "Transaction complete, trust score updated",
@@ -89,33 +100,20 @@ export default function DemoPage() {
     },
   ]);
 
+  // Seed demo data
+  async function handleSeedData() {
+    setIsSeeding(true);
+    try {
+      seedDemoData();
+      toast.success("Demo data seeded successfully!");
+    } catch (error) {
+      toast.error("Failed to seed demo data");
+    } finally {
+      setIsSeeding(false);
+    }
+  }
+
   // Auto-play demo
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const timer = setTimeout(() => {
-      if (currentStep < steps.length - 1) {
-        setCurrentStep((prev) => prev + 1);
-        setSteps((prev) =>
-          prev.map((step, i) => ({
-            ...step,
-            status:
-              i < currentStep + 1
-                ? "completed"
-                : i === currentStep + 1
-                ? "active"
-                : "pending",
-          }))
-        );
-      } else {
-        setIsPlaying(false);
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [isPlaying, currentStep, steps.length]);
-
-  // Start demo
   function handleStart() {
     setCurrentStep(0);
     setSteps((prev) =>
@@ -141,14 +139,38 @@ export default function DemoPage() {
 
   // Step details
   const stepDetails: Record<string, string> = {
-    connect: "MetaMask popup appears. User approves connection. Wallet address: 0x1234...CFO",
-    permission: "ERC-7715 Advanced Permission granted:\n• Target: Marketing Agent\n• Limit: 10 USDC/day\n• Duration: 30 days\n• Scope: Vendor payments only",
-    request: "Marketing Agent submits spend request:\n• Amount: 8 USDC\n• Recipient: 0x7099...Vendor\n• Memo: Q2 marketing invoice #1042",
-    audit: "Venice AI analyzes:\n✓ Permission valid\n✓ Amount within daily limit\n✓ Recipient verified\n✓ Memo legitimate\n✓ Budget available\n✓ No anomalies detected",
-    decision: "Venice AI Verdict:\n• Decision: APPROVED\n• Confidence: 92%\n• Reasoning: Valid vendor payment within limits",
-    execute: "ERC-7710 delegation redeemed:\n• Session account executes transfer\n• 8 USDC transferred to vendor\n• Gasless via MetaMask Smart Accounts Kit\n• Transaction hash: 0xabcd...ef01",
-    result: "Final state:\n• Vendor received 8 USDC ✅\n• Marketing Agent budget: 500 → 492 USDC\n• Trust score: 82 → 85 (+3)\n• Audit log updated\n• KPI progress: ROI 1.8x → 1.9x",
+    connect: "MetaMask popup appears. User approves connection.\nWallet address: 0x1234...CFO\nNetwork: Sepolia Testnet",
+    permission: "ERC-7715 Advanced Permission granted:\n• Target: Marketing Agent\n• Limit: 100 USDC/day\n• Duration: 30 days\n• Scope: Vendor payments only",
+    request: "Marketing Agent submits spend request:\n• Amount: 8 USDC\n• Recipient: 0x7099...Vendor\n• Memo: Q2 marketing invoice #1042\n• Agent trust score: 85/100",
+    audit: "Venice AI analyzes:\n✓ Permission valid\n✓ Amount within daily limit\n✓ Recipient verified\n✓ Memo legitimate\n✓ Budget available\n✓ No anomalies detected\n✓ Vendor history: 5 previous payments",
+    decision: "Venice AI Verdict:\n• Decision: APPROVED\n• Confidence: 94%\n• Reasoning: Valid vendor payment within limits\n• Pattern: Normal spending behavior",
+    execute: "ERC-7710 delegation redeemed:\n• Session account executes transfer\n• 8 USDC transferred to vendor\n• Gasless via MetaMask Smart Accounts Kit\n• Transaction hash: 0xabcd...ef01\n• Block: #12345678",
+    blocked: "Suspicious Request:\n• Amount: 50 USDC\n• Recipient: 0x3C44...suspicious\n• Venice AI: BLOCKED\n• Reason: Address flagged as malicious\n• Trust score: -5 points",
+    result: "Final state:\n• Vendor received 8 USDC ✅\n• Marketing Agent budget: 500 → 492 USDC\n• Trust score: 82 → 85 (+3)\n• Audit log updated\n• KPI progress: ROI 1.8x → 1.9x\n• Anomaly logged for blocked request",
   };
+
+  // Auto-advance steps
+  useState(() => {
+    if (isPlaying) {
+      const timer = setInterval(() => {
+        setCurrentStep((prev) => {
+          if (prev >= steps.length - 1) {
+            setIsPlaying(false);
+            clearInterval(timer);
+            return prev;
+          }
+          setSteps((s) =>
+            s.map((step, i) => ({
+              ...step,
+              status: i < prev + 1 ? "completed" : i === prev + 1 ? "active" : "pending",
+            }))
+          );
+          return prev + 1;
+        });
+      }, 3000);
+      return () => clearInterval(timer);
+    }
+  });
 
   return (
     <AppShell
@@ -156,8 +178,8 @@ export default function DemoPage() {
       description="Watch Citadel in action — from permission grant to on-chain execution."
     >
       <FadeIn>
-        {/* ── Controls ────────────────────────────────────── */}
-        <div className="flex items-center gap-4 mb-8">
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-4 mb-8">
           <Button onClick={handleStart} disabled={isPlaying}>
             <Play className="h-4 w-4 mr-2" />
             {isPlaying ? "Playing..." : "Start Demo"}
@@ -166,15 +188,18 @@ export default function DemoPage() {
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset
           </Button>
+          <Button variant="secondary" onClick={handleSeedData} disabled={isSeeding}>
+            <Database className="h-4 w-4 mr-2" />
+            {isSeeding ? "Seeding..." : "Seed Demo Data"}
+          </Button>
           <div className="flex-1" />
           <Badge variant="outline">
             Step {currentStep + 1} of {steps.length}
           </Badge>
         </div>
 
-        {/* ── Timeline ────────────────────────────────────── */}
+        {/* Timeline */}
         <div className="relative">
-          {/* Vertical line */}
           <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-zinc-800" />
 
           <Stagger className="space-y-6" stagger={0.1}>
@@ -260,7 +285,7 @@ export default function DemoPage() {
           </Stagger>
         </div>
 
-        {/* ── Summary Card ────────────────────────────────── */}
+        {/* Summary Card */}
         <AnimatePresence>
           {currentStep === steps.length - 1 && (
             <motion.div
@@ -296,6 +321,14 @@ export default function DemoPage() {
                     <div className="flex items-center gap-2 text-sm text-zinc-400">
                       <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                       On-chain execution successful
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Suspicious request blocked
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Trust score updated
                     </div>
                   </div>
                 </CardContent>
