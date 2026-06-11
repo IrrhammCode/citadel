@@ -2,391 +2,308 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAccount } from "wagmi";
 import {
-  Shield,
   Bot,
-  Zap,
-  Activity,
-  Lightbulb,
+  Shield,
+  Wallet,
   ArrowRight,
   CheckCircle2,
   XCircle,
-  Loader2,
-  TrendingUp,
-  Wallet,
+  Clock,
+  Play,
+  RotateCcw,
+  Zap,
+  Brain,
+  Lock,
+  Unlock,
+  DollarSign,
+  AlertTriangle,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { LandingCta } from "@/components/landing/landing-cta";
-import { GrantPermissionModal } from "@/components/permissions/grant-permission-modal";
-import { EnhancedVerdictPanel } from "@/components/audit/enhanced-verdict-panel";
-import { TrustScoreBadge } from "@/components/agent/trust-score-badge";
-import { ActivityFeed } from "@/components/agent/activity-feed";
-import { VeniceSuggestions } from "@/components/agent/venice-suggestions";
-import { BudgetPoolCard } from "@/components/agent/budget-pool-card";
-import { UpgradeToSmartAccount } from "@/components/agent/upgrade-7702";
-import { AnomalyAlerts } from "@/components/agent/anomaly-alerts";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useEnhancedAudit } from "@/hooks/useEnhancedAudit";
-import { usePermissions } from "@/hooks/usePermissions";
-import {
-  getTrustScore,
-  getBudgetPool,
-  getAnomalies,
-  getAuditLog,
-  addActivity,
-  updateTrustScore,
-  addDailySpend,
-} from "@/lib/storage";
-import { AUTONOMOUS_SYSTEMS } from "@/types/system";
-import { DEFAULT_VENDOR_ADDRESS } from "@/lib/constants";
-import type { EnhancedVerdict } from "@/lib/venice/client";
+import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
 
-const STEPS = [
-  { id: "connect", title: "Connect Wallet", icon: Wallet },
-  { id: "permission", title: "Grant Permission", icon: Shield },
-  { id: "agent", title: "Agent Decides", icon: Bot },
-  { id: "venice", title: "Venice Audits", icon: Zap },
-  { id: "execute", title: "Execute / Block", icon: CheckCircle2 },
-  { id: "learn", title: "Agent Learns", icon: TrendingUp },
-];
+type DemoStep = {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  status: "pending" | "active" | "completed" | "failed";
+  detail?: string;
+};
 
 export default function DemoPage() {
-  const { isConnected } = useAccount();
-  const { permissions, refresh } = usePermissions();
-  const { audit, loading: auditLoading, verdict } = useEnhancedAudit();
-
   const [currentStep, setCurrentStep] = useState(0);
-  const [selectedSystem] = useState(AUTONOMOUS_SYSTEMS[0]); // Marketing Agent
-  const [amount, setAmount] = useState("8");
-  const [recipient, setRecipient] = useState<string>(DEFAULT_VENDOR_ADDRESS);
-  const [memo, setMemo] = useState("Q2 marketing vendor invoice #1042");
-  const [executing, setExecuting] = useState(false);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [steps, setSteps] = useState<DemoStep[]>([
+    {
+      id: "connect",
+      title: "Connect MetaMask",
+      description: "CFO connects wallet to Citadel dashboard",
+      icon: Wallet,
+      status: "pending",
+    },
+    {
+      id: "permission",
+      title: "Grant Permission",
+      description: "CFO grants ERC-7715 permission to Marketing Agent",
+      icon: Lock,
+      status: "pending",
+    },
+    {
+      id: "request",
+      title: "Agent Request",
+      description: "Marketing Agent requests to pay vendor 8 USDC",
+      icon: Bot,
+      status: "pending",
+    },
+    {
+      id: "audit",
+      title: "Venice AI Audit",
+      description: "AI compliance firewall reviews the request",
+      icon: Brain,
+      status: "pending",
+    },
+    {
+      id: "decision",
+      title: "Audit Decision",
+      description: "Venice AI approves or blocks the request",
+      icon: Shield,
+      status: "pending",
+    },
+    {
+      id: "execute",
+      title: "On-chain Execute",
+      description: "Approved transaction executes via ERC-7710 delegation",
+      icon: Zap,
+      status: "pending",
+    },
+    {
+      id: "result",
+      title: "Result",
+      description: "Transaction complete, trust score updated",
+      icon: CheckCircle2,
+      status: "pending",
+    },
+  ]);
 
-  const permission = permissions.find((p) => p.systemId === selectedSystem.id);
-  const trustScore = getTrustScore(selectedSystem.id);
-  const pool = getBudgetPool();
-  const anomalies = getAnomalies(selectedSystem.id);
-  const auditLog = getAuditLog();
-
-  // Auto-advance steps
+  // Auto-play demo
   useEffect(() => {
-    if (isConnected && currentStep === 0) setCurrentStep(1);
-  }, [isConnected, currentStep]);
+    if (!isPlaying) return;
 
-  async function handleSpend() {
-    if (!permission) return;
-
-    setCurrentStep(2); // Agent decides
-    await new Promise((r) => setTimeout(r, 800));
-
-    setCurrentStep(3); // Venice audits
-    const result = await audit({
-      systemId: selectedSystem.id,
-      spendRequest: { amount, token: "USDC", recipient, memo },
-      permission: {
-        maxDailySpend: permission.maxDailySpend,
-        expiry: permission.expiry,
-        justification: permission.justification,
-      },
-      priorSpendToday: getAuditLog()
-        .filter((r) => r.systemId === selectedSystem.id)
-        .reduce((sum, r) => sum + parseFloat(r.spendRequest.amount), 0)
-        .toString(),
-    });
-
-    if (result) {
-      setCurrentStep(4); // Execute / Block
-
-      addActivity({
-        type: "audit",
-        systemId: selectedSystem.id,
-        systemName: selectedSystem.name,
-        message: `${result.decision === "approved" ? "Approved" : "Blocked"}: ${amount} USDC to ${recipient.slice(0, 10)}...`,
-        details: result.reasoning,
-        severity: result.decision === "approved" ? "success" : "error",
-      });
-
-      if (result.decision === "approved") {
-        addDailySpend(selectedSystem.id, amount);
-        updateTrustScore(selectedSystem.id, {
-          type: "success",
-          description: `Approved: ${amount} USDC`,
-          points: 1,
-          timestamp: Date.now(),
-        });
-
-        // Execute on-chain via delegation
-        try {
-          setExecuting(true);
-          const execRes = await fetch("/api/execute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              auditId: crypto.randomUUID(),
-              systemId: selectedSystem.id,
-              spendRequest: { amount, token: "USDC", recipient, memo },
-              grantedPermissions: permission.grantedPermissions,
-            }),
-          });
-
-          const execData = await execRes.json();
-          if (execRes.ok && execData.txHash) {
-            setTxHash(execData.txHash);
-            addActivity({
-              type: "execution",
-              systemId: selectedSystem.id,
-              systemName: selectedSystem.name,
-              message: `On-chain: ${amount} USDC → ${recipient.slice(0, 10)}...`,
-              details: `TX: ${execData.txHash.slice(0, 18)}...`,
-              severity: "success",
-            });
-          }
-        } catch (execErr) {
-          addActivity({
-            type: "execution",
-            systemId: selectedSystem.id,
-            systemName: selectedSystem.name,
-            message: `Execution failed: ${execErr instanceof Error ? execErr.message.slice(0, 50) : "unknown"}`,
-            severity: "error",
-          });
-        } finally {
-          setExecuting(false);
-        }
+    const timer = setTimeout(() => {
+      if (currentStep < steps.length - 1) {
+        setCurrentStep((prev) => prev + 1);
+        setSteps((prev) =>
+          prev.map((step, i) => ({
+            ...step,
+            status:
+              i < currentStep + 1
+                ? "completed"
+                : i === currentStep + 1
+                ? "active"
+                : "pending",
+          }))
+        );
       } else {
-        updateTrustScore(selectedSystem.id, {
-          type: "blocked",
-          description: `Blocked: ${result.reasoning.slice(0, 50)}`,
-          points: -5,
-          timestamp: Date.now(),
-        });
+        setIsPlaying(false);
       }
+    }, 2000);
 
-      await new Promise((r) => setTimeout(r, 500));
-      setCurrentStep(5); // Agent learns
-    }
+    return () => clearTimeout(timer);
+  }, [isPlaying, currentStep, steps.length]);
+
+  // Start demo
+  function handleStart() {
+    setCurrentStep(0);
+    setSteps((prev) =>
+      prev.map((step, i) => ({
+        ...step,
+        status: i === 0 ? "active" : "pending",
+      }))
+    );
+    setIsPlaying(true);
   }
 
-  function resetDemo() {
-    setCurrentStep(1);
-    setTxHash(null);
-    setAmount("8");
-    setRecipient(DEFAULT_VENDOR_ADDRESS);
-    setMemo("Q2 marketing vendor invoice #1042");
+  // Reset demo
+  function handleReset() {
+    setIsPlaying(false);
+    setCurrentStep(0);
+    setSteps((prev) =>
+      prev.map((step) => ({
+        ...step,
+        status: "pending",
+      }))
+    );
   }
+
+  // Step details
+  const stepDetails: Record<string, string> = {
+    connect: "MetaMask popup appears. User approves connection. Wallet address: 0x1234...CFO",
+    permission: "ERC-7715 Advanced Permission granted:\n• Target: Marketing Agent\n• Limit: 10 USDC/day\n• Duration: 30 days\n• Scope: Vendor payments only",
+    request: "Marketing Agent submits spend request:\n• Amount: 8 USDC\n• Recipient: 0x7099...Vendor\n• Memo: Q2 marketing invoice #1042",
+    audit: "Venice AI analyzes:\n✓ Permission valid\n✓ Amount within daily limit\n✓ Recipient verified\n✓ Memo legitimate\n✓ Budget available\n✓ No anomalies detected",
+    decision: "Venice AI Verdict:\n• Decision: APPROVED\n• Confidence: 92%\n• Reasoning: Valid vendor payment within limits",
+    execute: "ERC-7710 delegation redeemed:\n• Session account executes transfer\n• 8 USDC transferred to vendor\n• Gasless via MetaMask Smart Accounts Kit\n• Transaction hash: 0xabcd...ef01",
+    result: "Final state:\n• Vendor received 8 USDC ✅\n• Marketing Agent budget: 500 → 492 USDC\n• Trust score: 82 → 85 (+3)\n• Audit log updated\n• KPI progress: ROI 1.8x → 1.9x",
+  };
 
   return (
     <AppShell
-      title="Citadel — AI CFO Demo"
-      description="Watch the full autonomous treasury flow: Agent decides → Venice audits → Execute → Learn"
+      title="Live Demo"
+      description="Watch Citadel in action — from permission grant to on-chain execution."
     >
-      <div className="space-y-8">
-        {/* Connection Gate */}
-        {!isConnected && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center gap-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center"
-          >
-            <Shield className="h-12 w-12 text-amber-400" />
-            <div>
-              <h2 className="text-xl font-bold text-zinc-100">Connect to Start Demo</h2>
-              <p className="mt-2 text-zinc-400">Connect MetaMask to see the full autonomous treasury flow</p>
-            </div>
-            <LandingCta />
-          </motion.div>
-        )}
+      <FadeIn>
+        {/* ── Controls ────────────────────────────────────── */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button onClick={handleStart} disabled={isPlaying}>
+            <Play className="h-4 w-4 mr-2" />
+            {isPlaying ? "Playing..." : "Start Demo"}
+          </Button>
+          <Button variant="outline" onClick={handleReset}>
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset
+          </Button>
+          <div className="flex-1" />
+          <Badge variant="outline">
+            Step {currentStep + 1} of {steps.length}
+          </Badge>
+        </div>
 
-        {isConnected && (
-          <>
-            {/* Step Indicator */}
-            <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-              {STEPS.map((step, i) => {
-                const Icon = step.icon;
-                const isActive = i === currentStep;
-                const isDone = i < currentStep;
+        {/* ── Timeline ────────────────────────────────────── */}
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-zinc-800" />
 
-                return (
-                  <div key={step.id} className="flex items-center">
-                    <div className={`flex items-center gap-2 ${isActive ? "text-cyan-400" : isDone ? "text-emerald-400" : "text-zinc-600"}`}>
-                      <div className={`rounded-full p-2 ${isActive ? "bg-cyan-500/20" : isDone ? "bg-emerald-500/20" : "bg-zinc-800"}`}>
-                        {isDone ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : isActive ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Icon className="h-4 w-4" />
-                        )}
-                      </div>
-                      <span className="hidden text-sm font-medium sm:block">{step.title}</span>
-                    </div>
-                    {i < STEPS.length - 1 && (
-                      <ArrowRight className="mx-2 h-4 w-4 text-zinc-700" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          <Stagger className="space-y-6" stagger={0.1}>
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              const isActive = index === currentStep;
+              const isCompleted = step.status === "completed";
+              const isFailed = step.status === "failed";
 
-            {/* Main Content */}
-            <div className="grid gap-6 lg:grid-cols-3">
-              {/* Left: Controls */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Step 1: Permission */}
-                {currentStep >= 1 && (
+              return (
+                <StaggerItem key={step.id}>
                   <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6"
+                    animate={{
+                      opacity: isActive ? 1 : isCompleted ? 0.8 : 0.5,
+                      x: isActive ? 8 : 0,
+                    }}
+                    className="relative flex gap-6"
                   >
-                    <h3 className="font-semibold text-zinc-100">Step 1: Grant Permission</h3>
-                    <p className="mt-1 text-sm text-zinc-400">
-                      CFO grants ERC-7715 permission to {selectedSystem.name}
-                    </p>
-                    <div className="mt-4">
-                      <GrantPermissionModal
-                        systemId={selectedSystem.id}
-                        systemName={selectedSystem.name}
-                        existingPermission={permission}
-                        onGranted={refresh}
-                      />
-                    </div>
-                    {permission && (
-                      <div className="mt-3 rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-400">
-                        ✓ Permission active: {permission.maxDailySpend} USDC/day
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* Step 2-3: Spend Request + Venice Audit */}
-                {currentStep >= 2 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6"
-                  >
-                    <h3 className="font-semibold text-zinc-100">Step 2: Agent Requests Spend</h3>
-                    <p className="mt-1 text-sm text-zinc-400">
-                      {selectedSystem.name} found a vendor opportunity
-                    </p>
-
-                    <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                      <div>
-                        <Label className="text-zinc-400">Amount (USDC)</Label>
-                        <Input
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                          className="mt-1 bg-zinc-800 border-zinc-700"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-zinc-400">Recipient</Label>
-                        <Input
-                          value={recipient}
-                          onChange={(e) => setRecipient(e.target.value)}
-                          className="mt-1 bg-zinc-800 border-zinc-700 font-mono text-xs"
-                          placeholder="0x..."
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-zinc-400">Memo</Label>
-                        <Input
-                          value={memo}
-                          onChange={(e) => setMemo(e.target.value)}
-                          className="mt-1 bg-zinc-800 border-zinc-700"
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      className="mt-4"
-                      onClick={handleSpend}
-                      disabled={auditLoading || !permission}
+                    {/* Icon */}
+                    <div
+                      className={`relative z-10 flex h-16 w-16 items-center justify-center rounded-full border-2 ${
+                        isActive
+                          ? "border-emerald-500 bg-emerald-500/10"
+                          : isCompleted
+                          ? "border-emerald-500 bg-emerald-500/20"
+                          : isFailed
+                          ? "border-red-500 bg-red-500/10"
+                          : "border-zinc-700 bg-zinc-900"
+                      }`}
                     >
-                      {auditLoading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                      ) : isFailed ? (
+                        <XCircle className="h-6 w-6 text-red-400" />
                       ) : (
-                        <Zap className="mr-2 h-4 w-4" />
+                        <Icon
+                          className={`h-6 w-6 ${
+                            isActive ? "text-emerald-400" : "text-zinc-500"
+                          }`}
+                        />
                       )}
-                      Submit to Venice AI
-                    </Button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 pt-2">
+                      <h3
+                        className={`font-semibold ${
+                          isActive
+                            ? "text-emerald-400"
+                            : isCompleted
+                            ? "text-zinc-100"
+                            : "text-zinc-500"
+                        }`}
+                      >
+                        {step.title}
+                      </h3>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        {step.description}
+                      </p>
+
+                      {/* Detail */}
+                      <AnimatePresence>
+                        {isActive && stepDetails[step.id] && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-3"
+                          >
+                            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                              <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono">
+                                {stepDetails[step.id]}
+                              </pre>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </motion.div>
-                )}
+                </StaggerItem>
+              );
+            })}
+          </Stagger>
+        </div>
 
-                {/* Step 4: Venice Verdict */}
-                {currentStep >= 4 && verdict && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <EnhancedVerdictPanel verdict={verdict} />
-                  </motion.div>
-                )}
-
-                {/* Step 5: Execution Result */}
-                {currentStep >= 5 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6"
-                  >
-                    <h3 className="font-semibold text-zinc-100">Step 3: Result</h3>
-                    {verdict?.decision === "approved" ? (
-                      <div className="mt-4 rounded-lg bg-emerald-500/10 p-4">
-                        <div className="flex items-center gap-2 text-emerald-400">
-                          <CheckCircle2 className="h-5 w-5" />
-                          <span className="font-medium">Transaction Executed</span>
-                        </div>
-                        <p className="mt-2 text-sm text-zinc-400">
-                          {amount} USDC sent to {recipient.slice(0, 10)}...
-                        </p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          Agent trust score +1 • Daily spend updated
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-4 rounded-lg bg-red-500/10 p-4">
-                        <div className="flex items-center gap-2 text-red-400">
-                          <XCircle className="h-5 w-5" />
-                          <span className="font-medium">Transaction Blocked</span>
-                        </div>
-                        <p className="mt-2 text-sm text-zinc-400">
-                          Venice AI blocked this transaction
-                        </p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          Agent trust score -5 • Agent learned from this
-                        </p>
-                      </div>
-                    )}
-
-                    <Button variant="outline" className="mt-4" onClick={resetDemo}>
-                      Try Another Transaction
-                    </Button>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Right: Agent Status */}
-              <div className="space-y-6">
-                <TrustScoreBadge trustScore={trustScore} />
-                <BudgetPoolCard pool={pool} />
-                <AnomalyAlerts anomalies={anomalies} />
-                <ActivityFeed limit={10} />
-              </div>
-            </div>
-
-            {/* Bottom: Venice Suggestions + 7702 */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <VeniceSuggestions />
-              <UpgradeToSmartAccount />
-            </div>
-          </>
-        )}
-      </div>
+        {/* ── Summary Card ────────────────────────────────── */}
+        <AnimatePresence>
+          {currentStep === steps.length - 1 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mt-8"
+            >
+              <Card className="border-emerald-500/20 bg-emerald-500/5">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                    <h3 className="text-lg font-semibold text-emerald-400">
+                      Demo Complete!
+                    </h3>
+                  </div>
+                  <p className="text-sm text-zinc-300 mb-4">
+                    Citadel successfully demonstrated the zero-trust treasury flow:
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      MetaMask wallet connected
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ERC-7715 permission granted
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Venice AI audit completed
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      On-chain execution successful
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </FadeIn>
     </AppShell>
   );
 }
