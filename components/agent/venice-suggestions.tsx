@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Lightbulb, Loader2, TrendingUp, DollarSign, Shield, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchServerStore } from "@/lib/store-sync";
 import { getAuditLog, getBudgetPool, getTrustScore, getAnomalies } from "@/lib/storage";
 import { AUTONOMOUS_SYSTEMS } from "@/types/system";
 
@@ -26,16 +27,17 @@ export function VeniceSuggestions({ systemId }: Props) {
   async function generateSuggestions() {
     setLoading(true);
     try {
-      const pool = getBudgetPool();
+      const server = await fetchServerStore();
+      const pool = server?.budgetPool ?? getBudgetPool();
       const anomalies = getAnomalies(systemId);
-      const auditLog = getAuditLog();
+      const auditLog = server?.auditLog?.length ? server.auditLog : getAuditLog();
 
       const systems = systemId
         ? AUTONOMOUS_SYSTEMS.filter((s) => s.id === systemId)
         : AUTONOMOUS_SYSTEMS;
 
       const systemData = systems.map((s) => {
-        const trust = getTrustScore(s.id);
+        const trust = server?.trustScores?.[s.id] ?? getTrustScore(s.id);
         const spent = auditLog
           .filter((r) => r.systemId === s.id && r.verdict.decision === "approved")
           .reduce((sum, r) => sum + parseFloat(r.spendRequest.amount), 0);

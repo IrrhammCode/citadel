@@ -175,7 +175,7 @@ export async function withGracefulDegradation<T>(
 
 // ─── Error Logging ──────────────────────────────────────────
 
-const ERROR_LOG_KEY = "***";
+const ERROR_LOG_KEY = "citadel:error-log";
 
 export function logError(context: ErrorContext): void {
   if (typeof window === "undefined") return;

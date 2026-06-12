@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
@@ -8,436 +9,371 @@ import {
   Play,
   Pause,
   RefreshCw,
-  Clock,
   Activity,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
   Zap,
-  BarChart3,
-  Settings,
   Loader2,
-  Database,
   ShieldCheck,
   ShieldX,
+  ArrowRight,
+  UserPlus,
+  Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
+import { PipelineGuide } from "@/components/flow/pipeline-guide";
+import { ActivityFeed } from "@/components/agent/activity-feed";
+import { VeniceChat } from "@/components/agent/venice-chat";
 import { useSystems } from "@/hooks/useSystems";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useServerSync } from "@/hooks/useServerSync";
 import { getRecentDecisions } from "@/lib/agent/memory";
 import { toast } from "sonner";
+import { syncToServer, pullFromServer } from "@/lib/store-sync";
 
 type AgentStatus = {
   systemId: string;
   isRunning: boolean;
   cycleCount: number;
   lastCycle: number;
+  lastError?: string;
 };
 
 export default function AgentDashboardPage() {
   const { systems } = useSystems();
+  const { permissions } = usePermissions();
+  const { lastSync } = useServerSync(5000);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
-  const [decisionLogs, setDecisionLogs] = useState<any[]>([]);
+  const [decisionLogs, setDecisionLogs] = useState<ReturnType<typeof getRecentDecisions>>([]);
   const [loadingAgent, setLoadingAgent] = useState<string | null>(null);
-  const [isSeeding, setIsSeeding] = useState(false);
 
-  // Fetch agent statuses
+  const agentsWithPermission = systems.filter((s) =>
+    permissions.some((p) => p.systemId === s.id),
+  );
+
   const fetchStatuses = useCallback(async () => {
     try {
       const res = await fetch("/api/agent/loop");
-      if (res.ok) {
-        const data = await res.json();
-        setAgentStatuses(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch statuses:", error);
+      if (res.ok) setAgentStatuses(await res.json());
+    } catch {
+      /* ignore */
     }
   }, []);
 
-  // Fetch decision logs from memory
   const fetchDecisions = useCallback(() => {
-    const decisions = getRecentDecisions(20);
-    setDecisionLogs(decisions);
+    setDecisionLogs(getRecentDecisions(20));
   }, []);
 
   useEffect(() => {
-    fetchStatuses();
     fetchDecisions();
-    const interval = setInterval(() => {
-      fetchStatuses();
-      fetchDecisions();
-    }, 5000);
+  }, [fetchDecisions, lastSync]);
+
+  useEffect(() => {
+    fetchStatuses();
+    const interval = setInterval(fetchStatuses, 5000);
     return () => clearInterval(interval);
-  }, [fetchStatuses, fetchDecisions]);
+  }, [fetchStatuses]);
 
-  // Seed demo data
-  async function handleSeedData() {
-    setIsSeeding(true);
-    try {
-      const { seedDemoData } = await import("@/lib/demo/seed-data");
-      seedDemoData();
-      fetchDecisions();
-      toast.success("Demo data seeded!");
-    } catch (error) {
-      toast.error("Failed to seed data");
-    } finally {
-      setIsSeeding(false);
-    }
-  }
-
-  // Start agent
   async function handleStartAgent(systemId: string) {
     setLoadingAgent(systemId);
     try {
+      await syncToServer();
       const res = await fetch("/api/agent/loop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ systemId, intervalMinutes: 60 }),
       });
-
       if (res.ok) {
-        toast.success(`${systemId} agent started`);
+        toast.success("Agent started — first cycle running");
         fetchStatuses();
       } else {
         const data = await res.json();
-        toast.error(data.error || "Failed to start agent");
+        toast.error(data.error || "Failed to start");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to start agent");
     } finally {
       setLoadingAgent(null);
     }
   }
 
-  // Stop agent
   async function handleStopAgent(systemId: string) {
     setLoadingAgent(systemId);
     try {
-      const res = await fetch("/api/agent/loop", {
+      await fetch("/api/agent/loop", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ systemId }),
       });
-
-      if (res.ok) {
-        toast.success(`${systemId} agent stopped`);
-        fetchStatuses();
-      }
-    } catch (error) {
-      toast.error("Failed to stop agent");
+      toast.success("Agent stopped");
+      fetchStatuses();
+    } catch {
+      toast.error("Failed to stop");
     } finally {
       setLoadingAgent(null);
     }
   }
 
-  // Run single cycle (actually calls Venice AI)
   async function handleRunCycle(systemId: string) {
     setLoadingAgent(systemId);
     try {
+      await syncToServer();
       const res = await fetch("/api/agent/loop", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ systemId }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${systemId} cycle complete`);
+        const executed = data.outcomes?.filter((o: { executed: boolean }) => o.executed).length ?? 0;
+        toast.success(`Cycle selesai — ${executed} aksi dieksekusi`);
+        await pullFromServer();
         fetchStatuses();
         fetchDecisions();
       } else {
-        toast.error("Failed to run cycle");
+        const data = await res.json();
+        toast.error(data.error || "Cycle failed");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to run cycle");
     } finally {
       setLoadingAgent(null);
     }
   }
 
-  const runningAgents = Object.values(agentStatuses).filter((s) => s.isRunning);
-  const totalCycles = Object.values(agentStatuses).reduce((sum, s) => sum + s.cycleCount, 0);
+  const runningCount = Object.values(agentStatuses).filter((s) => s.isRunning).length;
 
   return (
     <AppShell
-      title="Agent Dashboard"
-      description="Monitor and control autonomous AI agents in real-time."
+      title="Run Agent"
+      description="Step 2 — Venice-powered reasoning → multi-step critique → audit gate → 1Shot execution. Fully autonomous agents."
+      actions={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/dashboard">
+            View Results
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      }
     >
       <FadeIn>
-        {/* Seed Data Button */}
-        <div className="mb-6">
-          <Button variant="secondary" onClick={handleSeedData} disabled={isSeeding}>
-            {isSeeding ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Database className="h-4 w-4 mr-2" />
-            )}
-            Seed Demo Data
-          </Button>
+        <div className="mb-8">
+          <PipelineGuide compact />
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.15)]">
-                  <Bot className="h-5 w-5 text-[#10b981]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#f2f2f2]">{systems.length}</p>
-                  <p className="text-xs text-[#71717a]">Total Agents</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.15)]">
-                  <Activity className="h-5 w-5 text-[#10b981]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#f2f2f2]">{runningAgents.length}</p>
-                  <p className="text-xs text-[#71717a]">Running</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800">
-                  <Zap className="h-5 w-5 text-[#a1a1aa]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#f2f2f2]">{totalCycles}</p>
-                  <p className="text-xs text-[#71717a]">Total Cycles</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 hover:border-[rgba(16,185,129,0.3)] transition-colors duration-200">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800">
-                  <Brain className="h-5 w-5 text-[#a1a1aa]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#f2f2f2]">{decisionLogs.length}</p>
-                  <p className="text-xs text-[#71717a]">Decisions</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Agent Controls */}
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Agent Controls</CardTitle>
-                <CardDescription className="mt-1">
-                  Start, stop, or run single cycles (calls Venice AI)
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={fetchStatuses}>
-                <RefreshCw className="h-4 w-4" />
+        {agentsWithPermission.length === 0 ? (
+          <Card className="border-dashed border-zinc-800">
+            <CardContent className="py-12 text-center">
+              <Bot className="mx-auto h-10 w-10 text-zinc-600" />
+              <h3 className="mt-4 text-lg font-medium text-zinc-300">No agents ready to run</h3>
+              <p className="mt-2 text-sm text-zinc-500">
+                Register an agent and grant ERC-7715 permission first.
+              </p>
+              <Button variant="emerald" className="mt-4" asChild>
+                <Link href="/register-agent">
+                  <UserPlus className="h-4 w-4" />
+                  Register Agent
+                </Link>
               </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Stats */}
+            <div className="mb-6 grid gap-3 sm:grid-cols-3">
+              <Card>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15">
+                    <Bot className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-zinc-100">{agentsWithPermission.length}</p>
+                    <p className="text-xs text-zinc-500">Agents siap</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15">
+                    <Activity className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-zinc-100">{runningCount}</p>
+                    <p className="text-xs text-zinc-500">Running</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800">
+                    <Brain className="h-5 w-5 text-zinc-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-zinc-100">{decisionLogs.length}</p>
+                    <p className="text-xs text-zinc-500">Decisions</p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Stagger className="space-y-3" stagger={0.05}>
-              {systems.slice(0, 10).map((system) => {
-                const status = agentStatuses[system.id];
-                const isRunning = status?.isRunning ?? false;
-                const isLoading = loadingAgent === system.id;
 
-                return (
-                  <StaggerItem key={system.id}>
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      whileHover={{ x: 4, borderColor: "rgba(16,185,129,0.3)" }}
-                      transition={{ duration: 0.2, ease: "easeOut" }}
-                      className={`flex items-center justify-between rounded-lg border p-4 transition-all duration-200 ${
-                        isRunning
-                          ? "border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.05)] shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-                          : "border-zinc-800 bg-zinc-900/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
+            {/* Agent controls */}
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Agent Controls</CardTitle>
+                    <CardDescription className="mt-1">
+                      Start untuk cycle otomatis, atau ⚡ untuk single cycle (think → audit → execute)
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchStatuses}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Stagger className="space-y-3" stagger={0.05}>
+                  {agentsWithPermission.map((system) => {
+                    const status = agentStatuses[system.id];
+                    const isRunning = status?.isRunning ?? false;
+                    const isLoading = loadingAgent === system.id;
+
+                    return (
+                      <StaggerItem key={system.id}>
                         <motion.div
-                          className={`relative flex h-8 w-8 items-center justify-center rounded-lg ${
-                            isRunning ? "bg-[rgba(16,185,129,0.15)]" : "bg-zinc-800"
+                          className={`flex items-center justify-between rounded-lg border p-4 ${
+                            isRunning
+                              ? "border-emerald-500/30 bg-emerald-500/5"
+                              : "border-zinc-800 bg-zinc-900/30"
                           }`}
-                          animate={isRunning ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 12px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] } : { boxShadow: "none" }}
-                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                         >
-                          {isRunning ? (
-                            <Activity className="h-4 w-4 text-[#10b981]" />
-                          ) : (
-                            <Bot className="h-4 w-4 text-[#a1a1aa]" />
-                          )}
-                        </motion.div>
-                        <div>
-                          <p className="font-medium text-[#f2f2f2]">{system.name}</p>
-                          <p className="text-xs text-[#71717a]">
-                            {isRunning ? `${status?.cycleCount ?? 0} cycles` : "Stopped"}
-                          </p>
-                        </div>
-                      </div>
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isRunning ? "bg-emerald-500/15" : "bg-zinc-800"}`}>
+                              {isRunning ? (
+                                <Activity className="h-4 w-4 text-emerald-400" />
+                              ) : (
+                                <Bot className="h-4 w-4 text-zinc-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-zinc-100">{system.name}</p>
+                              <p className="text-xs text-zinc-500">
+                                {isRunning ? `${status?.cycleCount ?? 0} cycles` : "Ready to run"}
+                              </p>
+                            </div>
+                          </div>
 
-                      <div className="flex items-center gap-2">
-                        <AnimatePresence mode="wait">
-                          <motion.div
-                            key={isRunning ? "running" : "stopped"}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            transition={{ duration: 0.15 }}
-                          >
-                            <Badge
-                              className={
-                                isRunning
-                                  ? "bg-[rgba(16,185,129,0.15)] text-[#10b981] border border-[rgba(16,185,129,0.3)]"
-                                  : "bg-zinc-800 text-[#a1a1aa] border border-zinc-700"
-                              }
-                            >
+                          <div className="flex items-center gap-2">
+                            <Badge variant={isRunning ? "approved" : "secondary"}>
                               {isRunning ? "Running" : "Stopped"}
                             </Badge>
-                          </motion.div>
-                        </AnimatePresence>
+                            {isRunning ? (
+                              <Button variant="outline" size="sm" onClick={() => handleStopAgent(system.id)} disabled={isLoading}>
+                                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
+                              </Button>
+                            ) : (
+                              <Button variant="default" size="sm" onClick={() => handleStartAgent(system.id)} disabled={isLoading}>
+                                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRunCycle(system.id)}
+                              disabled={isLoading}
+                              title="Single cycle"
+                            >
+                              {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </motion.div>
+                      </StaggerItem>
+                    );
+                  })}
+                </Stagger>
+              </CardContent>
+            </Card>
 
-                        {isRunning ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleStopAgent(system.id)}
-                            disabled={isLoading}
-                            className="border-zinc-700 bg-transparent text-[#a1a1aa] hover:border-[#ef4444] hover:bg-[rgba(239,68,68,0.1)] hover:text-[#ef4444] transition-all duration-200"
-                          >
-                            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Pause className="h-3 w-3" />}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleStartAgent(system.id)}
-                            disabled={isLoading}
-                            className="bg-[#10b981] text-[#0a0a0f] hover:bg-[#059669] font-semibold transition-all duration-200 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-                          >
-                            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                          </Button>
-                        )}
+            {/* Live Venice Intelligence — core demo of Best use of Venice AI + Best Agent */}
+            <div className="mb-6">
+              <div className="mb-2 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[--brand-primary]" />
+                <span className="text-xs uppercase tracking-[0.15em] text-[--text-tertiary]">Core Intelligence Layer — Venice AI</span>
+              </div>
+              <VeniceChat 
+                systemId={agentsWithPermission[0]?.id || "default"} 
+                systemName={agentsWithPermission[0]?.name || "Treasury Agent"} 
+              />
+            </div>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRunCycle(system.id)}
-                          disabled={isLoading}
-                          title="Run single cycle (calls Venice AI)"
-                          className="text-[#a1a1aa] hover:text-[#f2f2f2] hover:bg-zinc-800 transition-all duration-200"
-                        >
-                          {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                        </Button>
-                      </div>
-                    </motion.div>
-                  </StaggerItem>
-                );
-              })}
-            </Stagger>
-          </CardContent>
-        </Card>
+            {/* Live results from this session */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Latest Cycle Results</CardTitle>
+                <CardDescription>Activity from the most recent agent run</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ActivityFeed limit={8} pollIntervalMs={5000} compact />
+              </CardContent>
+            </Card>
 
-        {/* Decision Logs */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Decisions</CardTitle>
-            <CardDescription>AI agent decision history from memory</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {decisionLogs.length > 0 ? (
-              <Stagger className="space-y-4" stagger={0.05}>
-                {decisionLogs.slice(0, 10).map((log) => (
-                  <StaggerItem key={log.id}>
-                    <motion.div
-                      whileHover={{ x: 4, borderColor: "rgba(16,185,129,0.3)" }}
-                      transition={{ duration: 0.2 }}
-                      className={`rounded-lg border p-4 transition-all duration-200 ${
-                        log.outcome?.success
-                          ? "border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.03)]"
-                          : log.outcome && !log.outcome.success
-                          ? "border-[rgba(239,68,68,0.2)] bg-[rgba(239,68,68,0.03)]"
-                          : "border-zinc-800 bg-zinc-900/30"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Brain className="h-4 w-4 text-[#10b981]" />
-                          <span className="font-medium text-[#f2f2f2]">{log.systemId}</span>
+            {/* Decision logs */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Venice Decisions</CardTitle>
+                <CardDescription>AI reasoning dari agent brain</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {decisionLogs.length > 0 ? (
+                  <div className="space-y-3">
+                    {decisionLogs.slice(0, 5).map((log) => (
+                      <div
+                        key={log.id}
+                        className={`rounded-lg border p-4 ${
+                          log.outcome?.success
+                            ? "border-emerald-500/20 bg-emerald-500/5"
+                            : "border-zinc-800 bg-zinc-900/30"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-zinc-200">{log.systemId}</span>
+                          <span className="text-xs text-zinc-500">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </span>
                         </div>
-                        <span className="text-xs text-[#71717a]">
-                          {new Date(log.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {log.decision?.actions?.map((action: any, i: number) => (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <Badge variant="outline" className="text-xs border-zinc-700 text-[#a1a1aa]">{action.type}</Badge>
-                            <span className="text-[#f2f2f2]">{action.description}</span>
-                            <span className="text-xs text-[#71717a] font-mono">({(action.confidence * 100).toFixed(0)}%)</span>
+                        {log.decision?.actions?.map((action, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm text-zinc-400">
+                            <Badge variant="outline" className="text-xs">{action.type}</Badge>
+                            {action.description}
                           </div>
                         ))}
-                      </div>
-                      {log.decision?.reasoning && (
-                        <p className="mt-3 text-xs text-[#71717a]">{log.decision.reasoning}</p>
-                      )}
-                      {log.outcome && (
-                        <div className="mt-2">
-                          <Badge
-                            className={
-                              log.outcome.success
-                                ? "bg-[rgba(16,185,129,0.15)] text-[#10b981] border border-[rgba(16,185,129,0.3)]"
-                                : "bg-[rgba(239,68,68,0.15)] text-[#ef4444] border border-[rgba(239,68,68,0.3)]"
-                            }
-                          >
-                            <span className="flex items-center gap-1">
-                              {log.outcome.success ? (
-                                <ShieldCheck className="h-3 w-3" />
-                              ) : (
-                                <ShieldX className="h-3 w-3" />
-                              )}
-                              {log.outcome.success ? "Success" : log.outcome.error || "Failed"}
-                            </span>
+                        {log.decision?.reasoning && (
+                          <p className="mt-2 text-xs text-zinc-500">{log.decision.reasoning}</p>
+                        )}
+                        {log.outcome && (
+                          <Badge className="mt-2" variant={log.outcome.success ? "default" : "destructive"}>
+                            {log.outcome.success ? (
+                              <><ShieldCheck className="h-3 w-3 mr-1" /> Executed</>
+                            ) : (
+                              <><ShieldX className="h-3 w-3 mr-1" /> {log.outcome.error || "Failed"}</>
+                            )}
                           </Badge>
-                        </div>
-                      )}
-                    </motion.div>
-                  </StaggerItem>
-                ))}
-              </Stagger>
-            ) : (
-              <div className="py-8 text-center text-zinc-500">
-                <Brain className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No decisions recorded yet</p>
-                <p className="text-xs mt-1">Run a cycle or seed demo data to begin</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-6 text-center text-sm text-zinc-500">
+                    No decisions yet — click ⚡ to run the first cycle
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </FadeIn>
     </AppShell>
   );
 }
-
-

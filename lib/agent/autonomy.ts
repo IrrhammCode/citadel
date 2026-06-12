@@ -29,10 +29,14 @@ export type ApprovalRequest = {
   description: string;
   reasoning: string;
   confidence: number;
-  status: "pending" | "approved" | "rejected" | "auto-approved";
+  status: "pending" | "approved" | "rejected" | "auto-approved" | "executed";
   requestedAt: number;
   resolvedAt?: number;
   resolvedBy?: string;
+  /** EIP-712 signature from CFO wallet */
+  approvalSignature?: string;
+  /** Recovered or claimed signer address */
+  approvalSigner?: string;
 };
 
 // ─── Default Configs ────────────────────────────────────────
@@ -60,8 +64,8 @@ const DEFAULT_CONFIGS: Record<AutonomyLevel, Partial<AutonomyConfig>> = {
 
 // ─── Storage ────────────────────────────────────────────────
 
-const CONFIG_KEY = "***";
-const APPROVAL_KEY = "***";
+const CONFIG_KEY = "citadel:autonomy-config";
+const APPROVAL_KEY = "citadel:autonomy-approvals";
 
 function getConfigs(): Record<string, AutonomyConfig> {
   if (typeof window === "undefined") return {};

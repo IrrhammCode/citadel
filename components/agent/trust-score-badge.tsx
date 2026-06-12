@@ -10,10 +10,10 @@ type Props = {
 };
 
 const levelConfig = {
-  restricted: { color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", icon: AlertTriangle, label: "Restricted" },
-  standard: { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30", icon: Shield, label: "Standard" },
-  trusted: { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", icon: CheckCircle2, label: "Trusted" },
-  elite: { color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/30", icon: TrendingUp, label: "Elite" },
+  restricted: { color: "text-[--trust-restricted]", bg: "bg-[rgba(239,68,68,0.1)]", border: "border-[--trust-restricted]/30", icon: AlertTriangle, label: "Restricted" },
+  standard: { color: "text-[--trust-standard]", bg: "bg-[rgba(234,179,8,0.1)]", border: "border-[--trust-standard]/30", icon: Shield, label: "Standard" },
+  trusted: { color: "text-[--trust-trusted]", bg: "bg-[rgba(34,197,94,0.1)]", border: "border-[--trust-trusted]/30", icon: CheckCircle2, label: "Trusted" },
+  elite: { color: "text-[--trust-elite]", bg: "bg-[rgba(16,185,129,0.12)]", border: "border-[--trust-elite]/40", icon: TrendingUp, label: "Elite" },
 };
 
 export function TrustScoreBadge({ trustScore, compact }: Props) {
@@ -55,9 +55,9 @@ export function TrustScoreBadge({ trustScore, compact }: Props) {
       <div className="mt-3 h-2 rounded-full bg-zinc-800">
         <motion.div
           className={`h-full rounded-full ${
-            trustScore.level === "restricted" ? "bg-red-500" :
-            trustScore.level === "standard" ? "bg-amber-500" :
-            trustScore.level === "trusted" ? "bg-emerald-500" : "bg-cyan-500"
+            trustScore.level === "restricted" ? "bg-[--trust-restricted]" :
+            trustScore.level === "standard" ? "bg-[--trust-standard]" :
+            trustScore.level === "trusted" ? "bg-[--trust-trusted]" : "bg-[--trust-elite]"
           }`}
           initial={{ width: 0 }}
           animate={{ width: `${trustScore.score}%` }}

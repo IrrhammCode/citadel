@@ -1,7 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   Shield,
   Bot,
@@ -10,347 +10,242 @@ import {
   ArrowRight,
   CheckCircle2,
   Zap,
+  UserPlus,
+  Activity,
+  ScrollText,
 } from "lucide-react";
 import { LandingCta } from "@/components/landing/landing-cta";
 import { Badge } from "@/components/ui/badge";
-import { FadeIn, Stagger, StaggerItem, PulseGlow } from "@/components/motion/motion";
-import { fadeLeft, scaleIn } from "@/lib/motion";
+import { GlassCard } from "@/components/premium/glass-card";
+import { FadeIn, Stagger, StaggerItem } from "@/components/motion/motion";
+
+const HeroScene = dynamic(
+  () => import("@/components/3d/hero-scene").then((m) => m.HeroScene),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-[--border-default] bg-[--canvas-elevated]/60">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[--border-emerald] border-t-[--brand-primary]" />
+      </div>
+    ),
+  },
+);
+
+const NAV_LINKS = [
+  { href: "#how-it-works", label: "How it Works" },
+  { href: "#features", label: "Features" },
+  { href: "#get-started", label: "Get Started" },
+];
 
 const features = [
   {
-    icon: Lock,
-    title: "Granular Permissions",
+    icon: UserPlus,
+    title: "Register Agent",
     description:
-      "Issue scoped ERC-7715 Advanced Permissions via MetaMask. Set daily spend limits, expiry, and justification — all in one human-readable approval.",
+      "Unified wizard: identity, mandate, Venice policy, and ERC-7715 grant in one flow.",
   },
   {
     icon: Sparkles,
-    title: "Venice AI Firewall",
+    title: "Venice AI Core Intelligence",
     description:
-      "Every spend request is audited in real-time by a private Venice AI model. Approve or block with structured reasoning before a single wei moves.",
+      "Permissionless reasoning, risk analysis, report generation, and conversational CFO insights — all powered by Venice across text, logic, and visual outputs.",
   },
   {
     icon: Zap,
-    title: "Gasless Execution",
+    title: "Delegated Execution",
     description:
-      "Approved transactions execute via ERC-7710 delegation. Session accounts redeem permissions on behalf of your treasury — no manual signing per spend.",
+      "ERC-7715 session accounts execute on-chain only after Venice approval.",
   },
 ];
 
 const flowSteps = [
-  { step: "01", title: "CFO grants permission", body: "MetaMask Advanced Permissions popup with scoped USDC limits." },
-  { step: "02", title: "Agent requests spend", body: "Autonomous system submits vendor payment with memo and context." },
-  { step: "03", title: "Venice audits", body: "Private AI compliance check — policy, limits, anomalies, injection." },
-  { step: "04", title: "Execute or block", body: "Approved spends redeem on-chain. Blocked spends halt with reasoning." },
-];
-
-const stack = ["MetaMask Smart Accounts Kit", "ERC-7715", "ERC-7710", "Venice AI", "Sepolia"];
-
-const heroStats = [
-  { label: "Permission scope", value: "10 USDC / day", status: "ERC-7715" },
-  { label: "Venice verdict", value: "Approved", status: "92% confidence" },
-  { label: "Execution", value: "Delegated", status: "Gasless" },
+  {
+    step: "1",
+    icon: UserPlus,
+    title: "Register Agent",
+    body: "CFO registers the agent, sets budget & KPIs, and grants permission via MetaMask.",
+    href: "/register-agent",
+  },
+  {
+    step: "2",
+    icon: Activity,
+    title: "Run Agent",
+    body: "Autonomous agent: observe → Venice think → audit gate → execute.",
+    href: "/agent-dashboard",
+  },
+  {
+    step: "3",
+    icon: Bot,
+    title: "Results Delivered",
+    body: "Activity feed, audit log, and reports flow into the CFO dashboard.",
+    href: "/dashboard",
+  },
+  {
+    step: "4",
+    icon: ScrollText,
+    title: "Venice Audit Trail",
+    body: "Every decision is recorded with reasoning, confidence scores, and flags.",
+    href: "/audit-log",
+  },
 ];
 
 export function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0a0a0f]">
-      {/* Animated background */}
-      <div className="pointer-events-none absolute inset-0">
-        <PulseGlow className="-left-32 top-0 h-[500px] w-[500px] bg-emerald-600/10 blur-[120px]" />
-        <PulseGlow className="-right-32 top-1/3 h-[400px] w-[400px] bg-emerald-500/5 blur-[100px]" />
-        <motion.div
-          className="absolute bottom-0 left-1/2 h-[300px] w-[600px] -translate-x-1/2 rounded-full bg-zinc-800/20 blur-[80px]"
-          animate={{ opacity: [0.15, 0.3, 0.15] }}
-          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
-            backgroundSize: "64px 64px",
-          }}
-          animate={{ backgroundPosition: ["0px 0px", "64px 64px"] }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-
-      {/* Nav */}
-      <motion.header
-        initial={{ opacity: 0, y: -16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 border-b border-zinc-800/60 bg-[#0a0a0f]/80 backdrop-blur-md"
-      >
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/" className="group flex items-center gap-3">
-            <motion.div
-              whileHover={{ rotate: 5, scale: 1.05 }}
-              className="flex items-center justify-center rounded-lg overflow-hidden"
-            >
-              <img src="/logo.png" alt="Citadel" className="h-8 w-8 object-cover" />
-            </motion.div>
-            <div>
-              <p className="text-sm font-semibold text-zinc-100">Citadel</p>
-              <p className="text-xs text-zinc-500">Zero-Trust Treasury</p>
+    <div className="min-h-screen bg-[#050508]">
+      <header className="sticky top-0 z-30 border-b border-[--border-default] bg-[--canvas]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[--border-emerald] bg-[--brand-glow]">
+              <Shield className="h-4 w-4 text-[--brand-primary]" />
             </div>
+            <span className="font-display text-lg font-semibold text-[--text-primary]">Citadel</span>
           </Link>
-          <Stagger className="hidden items-center gap-2 sm:flex" stagger={0.06}>
-            {stack.slice(0, 3).map((tag) => (
-              <StaggerItem key={tag}>
-                <Badge variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              </StaggerItem>
+          <nav className="hidden items-center gap-6 md:flex">
+            {NAV_LINKS.map((link) => (
+              <a key={link.href} href={link.href} className="text-sm text-zinc-500 transition-colors hover:text-zinc-200">
+                {link.label}
+              </a>
             ))}
-          </Stagger>
+          </nav>
+          <LandingCta size="sm" />
         </div>
-      </motion.header>
+      </header>
 
-      {/* Hero */}
-      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-20 md:pt-28">
-        {/* Emerald radial glow behind hero */}
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/4 -translate-x-1/2 -translate-y-1/2"
-          style={{
-            width: "700px",
-            height: "500px",
-            background:
-              "radial-gradient(ellipse at center, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 40%, transparent 70%)",
-            filter: "blur(60px)",
-          }}
-        />
-        <FadeIn className="max-w-3xl relative">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
-            <Badge variant="default" className="mb-6">
-              MetaMask Smart Accounts Kit Hackathon
+      <section className="mx-auto max-w-6xl px-6 py-16 md:py-24">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <FadeIn>
+            <Badge variant="approved" className="mb-5">
+              MetaMask Smart Accounts × Venice AI × 1Shot
             </Badge>
-          </motion.div>
-          <h1 className="text-5xl font-bold leading-[1.1] tracking-tight text-zinc-50 md:text-6xl">
-            Corporate treasury,{" "}
-            <motion.span
-              className="inline-block bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent"
-              animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-            >
-              zero trust
-            </motion.span>{" "}
-            by design.
-          </h1>
-          <motion.p
-            className="mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            Citadel lets CFOs issue granular on-chain permissions to autonomous
-            systems. Every spending attempt is audited by Venice AI before
-            execution — so agents move fast, but never outside policy.
-          </motion.p>
-          <motion.div
-            className="mt-10 flex flex-wrap items-center gap-4"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.5 }}
-          >
-            <LandingCta size="lg" />
-            <motion.div whileHover={{ x: 4 }}>
+            <h1 className="font-display text-4xl leading-tight font-medium text-[--text-primary] md:text-5xl lg:text-6xl">
+              Autonomous agents.
+              <br />
+              <span className="text-gradient-emerald">Powered by Venice intelligence.</span>
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-[--text-secondary]">
+              Register agent → autonomous cycle (observe → Venice think → audit gate → execute) → results in dashboard.
+              Fail-closed. Zero trust by default.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <LandingCta size="lg" />
               <Link
                 href="#how-it-works"
-                className="inline-flex items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-200"
+                className="inline-flex items-center gap-2 rounded-xl border border-[--border-default] px-5 py-2.5 text-sm text-[--text-secondary] transition-colors hover:border-[--border-emerald] hover:text-[--text-primary]"
               >
-                See how it works
+                View the workflow
                 <ArrowRight className="h-4 w-4" />
               </Link>
-            </motion.div>
-          </motion.div>
-        </FadeIn>
-
-        <FadeIn delay={0.2} variants={scaleIn} className="mt-16">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 backdrop-blur-sm md:p-8">
-            <Stagger className="grid gap-4 md:grid-cols-3" stagger={0.12}>
-              {heroStats.map((item) => (
-                <StaggerItem key={item.label}>
-                  <motion.div
-                    whileHover={{ y: -6, borderColor: "rgba(16,185,129,0.2)" }}
-                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5 transition-colors duration-200"
-                  >
-                    <p className="text-xs uppercase tracking-wider text-zinc-500">
-                      {item.label}
-                    </p>
-                    <motion.p
-                      className="mt-2 text-xl font-semibold text-zinc-100"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.5 }}
-                    >
-                      {item.value}
-                    </motion.p>
-                    <p className="mt-1 text-xs text-emerald-400">{item.status}</p>
-                  </motion.div>
-                </StaggerItem>
-              ))}
-            </Stagger>
-          </div>
-        </FadeIn>
+            </div>
+          </FadeIn>
+          <FadeIn delay={0.1}>
+            <div className="relative">
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[--brand-glow] to-[rgba(16,185,129,0.03)] blur-2xl" />
+              <div className="relative overflow-hidden rounded-2xl border border-[--border-default] bg-[--canvas-elevated]/60">
+                <HeroScene className="h-[300px] w-full md:h-[380px]" />
+              </div>
+            </div>
+          </FadeIn>
+        </div>
       </section>
 
-      {/* Features */}
-      <section className="relative z-10 border-t border-zinc-800/60 bg-zinc-950/30 py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <FadeIn className="mb-12 max-w-2xl">
-            <h2 className="text-3xl font-bold tracking-tight text-zinc-100">
-              Built for autonomous finance
+      <section id="how-it-works" className="border-t border-[--border-default] bg-[--canvas-elevated]/30 py-20">
+        <div className="mx-auto max-w-[1280px] px-6">
+          <FadeIn className="mb-12 text-center">
+            <p className="text-xs tracking-[0.2em] text-[--text-tertiary] uppercase">Secure Pipeline</p>
+            <h2 className="font-display mt-2 text-3xl font-medium text-[--text-primary]">
+              Register → Run → Deliver
             </h2>
-            <p className="mt-4 text-zinc-400">
-              Three layers of control: wallet-native permissions, AI compliance,
-              and delegated execution.
+            <p className="mx-auto mt-3 max-w-lg text-sm text-[--text-secondary]">
+              Fail-closed vault flow. Every step audited by Venice AI. No bypass.
             </p>
           </FadeIn>
-          <Stagger className="grid gap-6 md:grid-cols-3" stagger={0.1}>
+
+          <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
+            {flowSteps.map(({ step, icon: Icon, title, body, href }) => (
+              <StaggerItem key={step}>
+                <Link href={href}>
+                  <GlassCard tilt={false} className="group h-full p-6 transition-colors hover:border-[--border-emerald]">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[--border-emerald] bg-[--brand-glow] text-sm font-semibold text-[--brand-primary]">
+                        {step}
+                      </div>
+                      <Icon className="h-5 w-5 text-[--brand-primary] opacity-70 group-hover:opacity-100" />
+                    </div>
+                    <h3 className="font-medium text-[--text-primary] group-hover:text-[--brand-primary] transition-colors">{title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[--text-secondary]">{body}</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-xs text-[--text-muted] group-hover:text-[--brand-primary]">
+                      Mulai <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </GlassCard>
+                </Link>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </div>
+      </section>
+
+      <section id="features" className="py-20">
+        <div className="mx-auto max-w-[1280px] px-6">
+          <FadeIn className="mb-12">
+            <p className="text-xs tracking-[0.2em] text-[--text-tertiary] uppercase">Core Capabilities</p>
+            <h2 className="font-display mt-2 text-3xl font-medium text-[--text-primary]">Venice AI + Autonomous Agents + MetaMask Permissions</h2>
+          </FadeIn>
+          <Stagger className="grid gap-5 md:grid-cols-3" stagger={0.1}>
             {features.map(({ icon: Icon, title, description }) => (
               <StaggerItem key={title}>
-                <motion.div
-                  whileHover={{ y: -6, borderColor: "rgba(39,39,42,0.9)" }}
-                  className="h-full rounded-xl border border-zinc-800 bg-zinc-900/30 p-6"
-                >
-                  <motion.div
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10"
-                  >
+                <GlassCard className="h-full p-6">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
                     <Icon className="h-5 w-5 text-emerald-400" />
-                  </motion.div>
-                  <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-                    {description}
-                  </p>
-                </motion.div>
+                  </div>
+                  <h3 className="font-medium text-zinc-100">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-500">{description}</p>
+                </GlassCard>
               </StaggerItem>
             ))}
           </Stagger>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="relative z-10 py-24">
-        <div className="mx-auto max-w-6xl px-6">
-          <FadeIn className="mb-12 flex items-end justify-between gap-6">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight text-zinc-100">
-                How Citadel works
-              </h2>
-              <p className="mt-4 text-zinc-400">
-                From permission grant to on-chain execution in four steps.
-              </p>
-            </div>
-            <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="hidden md:block"
-            >
-              <Bot className="h-12 w-12 text-zinc-700" />
-            </motion.div>
-          </FadeIn>
-          <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.1}>
-            {flowSteps.map(({ step, title, body }) => (
-              <StaggerItem key={step}>
-                <motion.div
-                  whileHover={{ scale: 1.02, y: -4 }}
-                  className="relative rounded-xl border border-zinc-800 bg-zinc-900/20 p-5"
-                >
-                  <motion.span
-                    className="font-mono text-xs text-emerald-500"
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true }}
-                  >
-                    {step}
-                  </motion.span>
-                  <h3 className="mt-2 font-semibold text-zinc-100">{title}</h3>
-                  <p className="mt-2 text-sm text-zinc-400">{body}</p>
-                </motion.div>
-              </StaggerItem>
-            ))}
-          </Stagger>
-        </div>
-      </section>
-
-      {/* Trust signals */}
-      <section className="relative z-10 border-t border-zinc-800/60 py-16">
-        <div className="mx-auto max-w-6xl px-6">
-          <Stagger
-            className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4"
-            stagger={0.08}
-          >
-            {[
-              "Signer-agnostic wallets",
-              "Private AI inference",
-              "Non-custodial delegations",
-              "Real-time audit trail",
-            ].map((item) => (
-              <StaggerItem key={item}>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  className="flex items-center gap-2 text-sm text-zinc-400"
-                >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          <FadeIn className="mt-10">
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+              {["ERC-7715 permissions", "Venice fail-closed audit", "Real-time activity feed", "x402 observability"].map((item) => (
+                <span key={item} className="flex items-center gap-2 text-sm text-zinc-500">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500/70" />
                   {item}
-                </motion.div>
-              </StaggerItem>
-            ))}
-          </Stagger>
+                </span>
+              ))}
+            </div>
+          </FadeIn>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="relative z-10 border-t border-zinc-800/60 bg-gradient-to-b from-transparent to-emerald-950/20 py-24">
-        <FadeIn variants={scaleIn} className="mx-auto max-w-2xl px-6 text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-100">
-            Ready to secure your treasury?
-          </h2>
-          <p className="mt-4 text-zinc-400">
-            Connect your MetaMask wallet to enter the CFO dashboard, grant
-            Advanced Permissions, and run live compliance audits.
-          </p>
-          <motion.div
-            className="mt-8 flex justify-center"
-            whileInView={{ scale: [0.95, 1] }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4 }}
-          >
-            <LandingCta size="lg" />
-          </motion.div>
-          <p className="mt-4 text-xs text-zinc-600">
-            Requires MetaMask with ERC-7715 support · Sepolia testnet
-          </p>
-        </FadeIn>
+      <section id="get-started" className="border-t border-[--border-default] py-20">
+        <div className="mx-auto max-w-2xl px-6 text-center">
+          <FadeIn>
+            <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-[--border-emerald] bg-[--brand-glow]">
+              <Bot className="h-6 w-6 text-[--brand-primary]" />
+            </div>
+            <h2 className="font-display text-3xl font-medium text-[--text-primary]">Start with Register Agent</h2>
+            <p className="mt-3 text-sm text-[--text-secondary]">
+              Connect MetaMask, define agent mandate + Venice policy, grant ERC-7715 permission. Then run autonomous cycles.
+            </p>
+            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <LandingCta size="lg" />
+              <Link
+                href="/demo"
+                className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+              >
+                <Lock className="h-4 w-4" />
+                Lihat Live Demo
+              </Link>
+            </div>
+            <p className="mt-4 text-[11px] text-zinc-600">MetaMask + ERC-7715 · Sepolia testnet</p>
+          </FadeIn>
+        </div>
       </section>
 
-      {/* Footer */}
-      <FadeIn variants={fadeLeft}>
-        <footer className="relative z-10 border-t border-zinc-800/60 py-8">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
-            <p className="text-xs text-zinc-600">
-              Citadel · MetaMask Smart Accounts Kit × Venice AI Hackathon
-            </p>
-            <Stagger className="flex flex-wrap justify-center gap-2" stagger={0.05}>
-              {stack.map((tag) => (
-                <StaggerItem key={tag}>
-                  <Badge variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                </StaggerItem>
-              ))}
-            </Stagger>
-          </div>
-        </footer>
-      </FadeIn>
+      <footer className="border-t border-[--border-default] py-8">
+        <div className="mx-auto max-w-[1280px] px-6 text-center">
+          <p className="text-xs text-[--text-muted]">Citadel · Zero-Trust Corporate Treasury · Vault-grade security</p>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -337,6 +337,59 @@ Essential for enterprise use cases with multiple autonomous systems.
 - [ ] Complete ERC-7715 permission object reference
 - [ ] Add end-to-end delegation example
 - [ ] Document permission revocation flow
+
+---
+
+## 🛠️ Citadel Implementation Pain Points (MetaMask Smart Accounts)
+
+**Project Context:** Citadel is a zero-trust autonomous treasury platform where multiple AI agents (marketing, finance, compliance, security, etc.) operate under ERC-7715 Advanced Permissions. We grant scoped permissions to session accounts, use 1Shot relayer for gas abstraction (x402 + stablecoins), and rely on Venice AI for all decision gates.
+
+### Additional Issues Encountered
+
+**1. Session Account + Permission Context Extraction (Critical DX Blocker)**
+- After `requestExecutionPermissions`, extracting the exact `permissionContext` and `delegationManager` for `sendTransactionWithDelegation` required deep reverse-engineering.
+- No clear mapping between the returned permission object and what the delegation functions expect.
+- In a multi-agent setup, we had to manually persist and map permissions per systemId.
+
+**2. 7702 Account Upgrade + 7715 Permission Grant Sequencing**
+- The order of operations (first 7702 upgrade via 1Shot, then grant permissions) is fragile.
+- No clear guidance on whether to upgrade first or grant on EOA then upgrade.
+- Frequent "account not upgraded" or "invalid context" errors during testing with the register-agent wizard.
+
+**3. MetaMask Flask + Advanced Permissions UX in Production-like Flows**
+- Users (even on Flask) often see confusing permission request UI.
+- The "Advanced Permissions" prompt does not clearly show the scoped limits (daily USDC, expiry, recipient restrictions) in a human-friendly way.
+- This hurts the "Best Agent" and "Best x402 + 7710" experience because end-users (CFOs) get a poor mental model of what they are granting.
+
+**4. Gas Sponsorship with 1Shot Relayer + Delegated Transactions**
+- Combining ERC-7710 delegated calls with 1Shot permissionless relayer (pay gas in USDC) required custom viem middleware.
+- Error messages when the relayer rejects (e.g., insufficient sponsored gas quota) are opaque.
+- Hard to surface "gas will be paid by 1Shot in USDC" to the user during the grant flow.
+
+**5. Permission Persistence & Revocation in Multi-Agent Systems**
+- Once granted, there is no first-class way to list/inspect active permissions per session account from the client side easily.
+- Revoking a specific agent's permission without affecting others is manual and error-prone.
+- In our Council (A2A) system, we needed cross-agent visibility into permission health — this is missing.
+
+**6. TypeScript / Type Safety for Permission Objects**
+- Heavy use of `as any` and manual type casting throughout the register wizard and permission grant flow.
+- The returned objects from the kit do not match the types needed for downstream delegation and 1Shot calls.
+
+**Recommendations for the MetaMask team (in addition to previous feedback):**
+- Provide a typed `PermissionContext` helper + `createDelegationManager` utility.
+- Official example repo showing "Agent Treasury" pattern: EOA → 7702 upgrade via relayer → 7715 grant → delegated execution via relayer (with x402).
+- Better permission request UI that visually summarizes scope (amount limits, expiry, allowed contracts) for non-technical signers (CFOs).
+- First-class support for "named permissions" so apps like Citadel can do `revokePermissionByName("marketing-agent-daily")`.
+
+These frictions significantly slowed development of a production-grade multi-agent system. Fixing the DX here would unlock many more "Best Agent" and "Best x402 + ERC-7710" submissions.
+
+---
+
+## ✅ Final Notes
+
+Citadel successfully demonstrates a real-world, fail-closed, Venice-AI-gated autonomous treasury using MetaMask Advanced Permissions + 1Shot relayer. The conceptual model is excellent; the current implementation experience still has rough edges that the above feedback aims to help smooth. 
+
+We are excited about the direction and hope this detailed report helps the team ship even better developer and end-user experiences.
 - [ ] Add error handling guide
 
 ### Medium-term (SDK)

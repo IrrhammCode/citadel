@@ -41,7 +41,7 @@ const DialogContent = React.forwardRef<
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 320, damping: 28 }}
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-zinc-800 bg-zinc-950 p-6 shadow-lg sm:rounded-xl",
+          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-[--border-default] bg-[--canvas-overlay] p-6 shadow-lg sm:rounded-xl",
           className,
         )}
       >
@@ -66,7 +66,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold text-zinc-100", className)}
+    className={cn("text-lg font-semibold text-[--text-primary]", className)}
     {...props}
   />
 ));
@@ -78,7 +78,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-zinc-400", className)}
+    className={cn("text-sm text-[--text-secondary]", className)}
     {...props}
   />
 ));

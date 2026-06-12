@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
@@ -13,10 +13,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "Citadel — Zero-Trust Corporate Treasury",
+  title: "Citadel — Institutional Zero-Trust Treasury",
   description:
-    "Granular on-chain permissions for autonomous systems with Venice AI compliance and MetaMask Advanced Permissions.",
+    "Premium corporate treasury infrastructure with MetaMask Advanced Permissions, Venice AI compliance, and autonomous agent governance.",
 };
 
 export default function RootLayout({
@@ -27,9 +33,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full bg-[#0a0a0f] text-zinc-100">
+      <body className="noise-overlay min-h-full bg-[--canvas] text-[--text-primary]">
         <Providers>{children}</Providers>
       </body>
     </html>

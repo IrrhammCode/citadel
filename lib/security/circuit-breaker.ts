@@ -196,7 +196,7 @@ export class RateLimiter {
 
 // ─── Security Events Storage ────────────────────────────────
 
-const SECURITY_EVENTS_KEY = "***";
+const SECURITY_EVENTS_KEY = "citadel:security-events";
 
 function getSecurityEvents(): SecurityEvent[] {
   if (typeof window === "undefined") return [];
@@ -219,7 +219,7 @@ export function getRecentSecurityEvents(limit: number = 50): SecurityEvent[] {
 
 // ─── Emergency Stop (Global) ────────────────────────────────
 
-const EMERGENCY_KEY = "***";
+const EMERGENCY_KEY = "citadel:emergency-stop";
 
 export function isGlobalEmergencyStop(): boolean {
   if (typeof window === "undefined") return false;
@@ -272,8 +272,8 @@ export type GuardianVote = {
   executedAt?: number;
 };
 
-const GUARDIANS_KEY = "***";
-const VOTES_KEY = "***";
+const GUARDIANS_KEY = "citadel:guardians";
+const VOTES_KEY = "citadel:guardian-votes";
 
 export function getGuardians(): Guardian[] {
   if (typeof window === "undefined") return [];

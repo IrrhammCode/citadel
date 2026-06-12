@@ -182,7 +182,7 @@ export function getHighestSeverity(results: ComplianceResult[]): "low" | "medium
 
 // ─── Audit Trail ────────────────────────────────────────────
 
-const AUDIT_TRAIL_KEY = "***";
+const AUDIT_TRAIL_KEY = "citadel:compliance-audit-trail";
 
 export function recordAudit(audit: AuditRecord): void {
   if (typeof window === "undefined") return;

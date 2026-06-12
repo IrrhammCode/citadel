@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
   ArrowRightLeft,
   FileText,
   TrendingUp,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ActivityEvent } from "@/types/activity";
 import { getActivity } from "@/lib/storage";
+import { fetchServerStore, pullFromServer } from "@/lib/store-sync";
 
 const typeConfig = {
   audit: { icon: Shield, color: "text-cyan-400" },
@@ -38,23 +38,91 @@ type Props = {
   systemId?: string;
   limit?: number;
   compact?: boolean;
+  pollIntervalMs?: number;
+  useSSE?: boolean;
 };
 
-export function ActivityFeed({ systemId, limit = 20, compact }: Props) {
+export function ActivityFeed({
+  systemId,
+  limit = 20,
+  compact,
+  pollIntervalMs = 5000,
+  useSSE = true,
+}: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
 
-  useEffect(() => {
+  const refreshFromStorage = useCallback(() => {
     const data = getActivity(limit);
     const filtered = systemId ? data.filter((e) => e.systemId === systemId) : data;
     setEvents(filtered);
   }, [systemId, limit]);
+
+  const pullAndRefresh = useCallback(async () => {
+    const server = await fetchServerStore();
+    if (server?.activity?.length) {
+      const data = server.activity.slice(0, limit);
+      setEvents(systemId ? data.filter((e) => e.systemId === systemId) : data);
+      return;
+    }
+    await pullFromServer().catch(() => {});
+    refreshFromStorage();
+  }, [refreshFromStorage, systemId, limit]);
+
+  useEffect(() => {
+    pullAndRefresh();
+
+    let eventSource: EventSource | null = null;
+
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connectSSE = () => {
+      if (!useSSE || typeof EventSource === "undefined") return;
+      try {
+        eventSource = new EventSource("/api/agent/events?stream=true");
+        eventSource.onmessage = (msg) => {
+          if (!msg.data || msg.data.startsWith(":")) return;
+          try {
+            const payload = JSON.parse(msg.data) as { activity?: ActivityEvent[] };
+            if (payload.activity?.length) {
+              const filtered = systemId
+                ? payload.activity.filter((e) => e.systemId === systemId)
+                : payload.activity;
+              setEvents(filtered.slice(0, limit));
+            }
+          } catch {
+            pullAndRefresh();
+          }
+        };
+        eventSource.onerror = () => {
+          eventSource?.close();
+          eventSource = null;
+          reconnectTimer = setTimeout(connectSSE, 3000);
+        };
+      } catch {
+        /* SSE unavailable */
+      }
+    };
+
+    connectSSE();
+
+    const interval = setInterval(pullAndRefresh, pollIntervalMs);
+    const onSync = () => refreshFromStorage();
+    window.addEventListener("citadel_synced", onSync);
+
+    return () => {
+      clearInterval(interval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      eventSource?.close();
+      window.removeEventListener("citadel_synced", onSync);
+    };
+  }, [pullAndRefresh, refreshFromStorage, pollIntervalMs, useSSE, systemId, limit]);
 
   if (events.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6 text-center">
         <Activity className="mx-auto h-8 w-8 text-zinc-600" />
         <p className="mt-2 text-sm text-zinc-500">No agent activity yet</p>
-        <p className="text-xs text-zinc-600">Actions will appear here as agents operate</p>
+        <p className="text-xs text-zinc-600">Run an agent cycle to see results here</p>
       </div>
     );
   }
@@ -68,6 +136,7 @@ export function ActivityFeed({ systemId, limit = 20, compact }: Props) {
           <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-500">
             {events.length}
           </span>
+          <span className="text-[10px] text-zinc-600">live · SSE + poll</span>
         </div>
       )}
 
@@ -85,7 +154,7 @@ export function ActivityFeed({ systemId, limit = 20, compact }: Props) {
                 i === 0 ? "border-cyan-500/20 bg-cyan-500/5" : ""
               }`}
             >
-              <div className={`mt-0.5 rounded-md bg-zinc-800 p-1.5`}>
+              <div className="mt-0.5 rounded-md bg-zinc-800 p-1.5">
                 <Icon className={`h-3.5 w-3.5 ${config.color}`} />
               </div>
               <div className="flex-1 min-w-0">

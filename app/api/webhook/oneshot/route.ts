@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import { updateDecisionOutcome } from "@/lib/agent/memory";
 import { AgentEventBus } from "@/lib/agent/event-bus";
+import { isProductionDeploy } from "@/lib/env";
+
+function verifyWebhookSecret(request: Request, body: string): boolean {
+  const secret = process.env.ONESHOT_WEBHOOK_SECRET;
+  if (!secret) return !isProductionDeploy();
+  const header = request.headers.get("x-oneshot-signature") ?? request.headers.get("x-webhook-secret");
+  if (!header) return false;
+  const expected = createHmac("sha256", secret).update(body).digest("hex");
+  try {
+    return timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+  } catch {
+    return header === secret;
+  }
+}
 
 // ─── 1Shot Webhook Handler ──────────────────────────────────
 // Receives transaction status updates from 1Shot API
@@ -15,13 +30,12 @@ type OneShotWebhookPayload = {
 
 export async function POST(request: Request) {
   try {
-    // Verify webhook signature (in production)
-    // const signature = request.headers.get("x-oneshot-signature");
-    // if (!verifySignature(signature, await request.clone().text())) {
-    //   return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    // }
+    const rawBody = await request.text();
+    if (!verifyWebhookSecret(request, rawBody)) {
+      return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+    }
 
-    const payload: OneShotWebhookPayload = await request.json();
+    const payload: OneShotWebhookPayload = JSON.parse(rawBody);
 
     console.log("📨 1Shot Webhook received:", payload);
 

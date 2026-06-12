@@ -37,6 +37,12 @@ function saveStore(store: KnowledgeStore) {
   window.dispatchEvent(new Event("knowledge_updated"));
 }
 
+async function syncItemToServer(item: KnowledgeItem) {
+  if (typeof window === "undefined") return;
+  const { persistKnowledgeToServer } = await import("@/lib/knowledge-sync");
+  await persistKnowledgeToServer(item);
+}
+
 // ─── Add Knowledge ──────────────────────────────────────────
 
 export function addKnowledge(item: Omit<KnowledgeItem, "id" | "metadata">): KnowledgeItem {
@@ -52,6 +58,7 @@ export function addKnowledge(item: Omit<KnowledgeItem, "id" | "metadata">): Know
   store.items.push(newItem);
   store.lastUpdated = Date.now();
   saveStore(store);
+  void syncItemToServer(newItem);
 
   return newItem;
 }
@@ -157,6 +164,9 @@ export function removeKnowledge(id: string) {
   store.items = store.items.filter((item) => item.id !== id);
   store.lastUpdated = Date.now();
   saveStore(store);
+  void import("@/lib/knowledge-sync").then(({ removeKnowledgeFromServer }) =>
+    removeKnowledgeFromServer(id),
+  );
 }
 
 export function clearKnowledgeForAgent(systemId: string) {
@@ -168,7 +178,7 @@ export function clearKnowledgeForAgent(systemId: string) {
 
 // ─── Extract Rules ──────────────────────────────────────────
 
-function extractRulesFromText(text: string): string[] {
+export function extractRulesFromText(text: string): string[] {
   const rules: string[] = [];
   const lines = text.split("\n");
 
@@ -284,9 +294,23 @@ export async function importFromUrl(
   systemId: string,
   url: string,
 ): Promise<KnowledgeItem> {
-  // In production, this would fetch the URL content
-  // For now, create a placeholder
-  const content = `[Content from ${url}]\n\nThis is a placeholder for URL content. In production, this would fetch and parse the actual webpage.`;
+  let content = "";
+  try {
+    const res = await fetch("/api/knowledge/fetch-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { content?: string };
+      content = data.content ?? "";
+    }
+  } catch {
+    /* fallback below */
+  }
+  if (!content) {
+    content = `[Could not fetch ${url}] Add content manually or check URL accessibility.`;
+  }
 
   return addUrlKnowledge(
     systemId,

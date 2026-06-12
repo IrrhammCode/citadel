@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
   TrendingUp,
   TrendingDown,
@@ -212,7 +213,7 @@ function MetricCard({
   subtext,
   accent = "emerald",
 }: {
-  icon: React.ElementType;
+  icon: LucideIcon;
   label: string;
   value: string;
   subtext?: string;

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { Toaster } from "sonner";
 import { wagmiConfig } from "@/lib/wagmi";
+import { AutoSyncProvider } from "@/components/providers/auto-sync-provider";
 import { useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -12,16 +13,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster
-          theme="dark"
-          position="bottom-right"
-          toastOptions={{
-            classNames: {
-              toast: "bg-zinc-900 border border-zinc-800 text-zinc-100",
-            },
-          }}
-        />
+        <AutoSyncProvider>
+          {children}
+          <Toaster
+            theme="dark"
+            position="bottom-right"
+            toastOptions={{
+              classNames: {
+                toast: "bg-[--canvas-elevated] border border-[--border-default] text-[--text-primary]",
+              },
+            }}
+          />
+        </AutoSyncProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

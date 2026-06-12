@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auditEnhanced } from "@/lib/venice/client";
+import { VeniceService } from "@/lib/venice/service";
+import { apiGuard } from "@/lib/server/api-guard";
 
 const enhancedAuditSchema = z.object({
   systemId: z.string(),
@@ -27,12 +28,17 @@ const enhancedAuditSchema = z.object({
     recipient: z.string(),
     timestamp: z.number(),
   })).optional(),
+  tatumIntelligence: z.record(z.string(), z.unknown()).optional(),
+  simulation: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: Request) {
+  const guard = await apiGuard(request);
+  if (guard) return guard;
+
   try {
     const body = enhancedAuditSchema.parse(await request.json());
-    const verdict = await auditEnhanced(body);
+    const verdict = await VeniceService.audit(body as Parameters<typeof VeniceService.audit>[0]);
     return NextResponse.json({ verdict });
   } catch (error) {
     if (error instanceof z.ZodError) {

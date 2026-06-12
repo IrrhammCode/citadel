@@ -5,6 +5,10 @@
 
 export function seedDemoData() {
   if (typeof window === "undefined") return;
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") {
+    console.warn("[seed] Skipped — set NEXT_PUBLIC_DEMO_MODE=true to enable demo seeding");
+    return;
+  }
 
   console.log("🌱 Seeding demo data...");
 
@@ -65,7 +69,7 @@ function seedPermissions() {
       grantedPermissions: [],
     },
   ];
-  localStorage.setItem("citadel_permissions", JSON.stringify(permissions));
+  localStorage.setItem("citadel:permissions", JSON.stringify(permissions));
 }
 
 function seedAuditLog() {
@@ -107,7 +111,7 @@ function seedAuditLog() {
       timestamp: now - 5 * 60 * 1000,
     },
   ];
-  localStorage.setItem("citade…udit_log", JSON.stringify(audits));
+  localStorage.setItem("citadel:audit-log", JSON.stringify(audits));
 }
 
 function seedTrustScores() {
@@ -119,7 +123,7 @@ function seedTrustScores() {
     analytics: { score: 70, level: "standard", maxTxAmount: 20, history: [], updatedAt: Date.now() },
     security: { score: 88, level: "trusted", maxTxAmount: 50, history: [], updatedAt: Date.now() },
   };
-  localStorage.setItem("citade…cores", JSON.stringify(scores));
+  localStorage.setItem("citadel:trust-scores", JSON.stringify(scores));
 }
 
 function seedVendors() {
@@ -136,7 +140,7 @@ function seedVendors() {
       notes: ["Verified vendor", "On-time delivery"],
     },
   };
-  localStorage.setItem("***", JSON.stringify(vendors));
+  localStorage.setItem("citadel:vendors", JSON.stringify(vendors));
 }
 
 function seedAnomalies() {
@@ -153,7 +157,7 @@ function seedAnomalies() {
       resolved: false,
     },
   ];
-  localStorage.setItem("***", JSON.stringify(anomalies));
+  localStorage.setItem("citadel:anomalies", JSON.stringify(anomalies));
 }
 
 function seedBudgetPool() {
@@ -172,7 +176,7 @@ function seedBudgetPool() {
       { systemId: "vendor", amount: 500 },
     ],
   };
-  localStorage.setItem("citade…pool", JSON.stringify(pool));
+  localStorage.setItem("citadel:budget-pool", JSON.stringify(pool));
 }
 
 function seedActivity() {
@@ -184,7 +188,7 @@ function seedActivity() {
     { id: "act-004", systemId: "payroll", systemName: "Payroll Agent", type: "execution", message: "Contractor payout: 150 USDC", severity: "success", timestamp: now - 15 * 60 * 1000 },
     { id: "act-005", systemId: "marketing", systemName: "Marketing Agent", type: "trust_change", message: "Trust score increased: 82 → 85", severity: "success", timestamp: now - 5 * 60 * 1000 },
   ];
-  localStorage.setItem("***", JSON.stringify(activities));
+  localStorage.setItem("citadel:activity", JSON.stringify(activities));
 }
 
 function seedMemory() {
@@ -208,7 +212,7 @@ function seedMemory() {
     ],
     lastUpdated: Date.now(),
   };
-  localStorage.setItem("***", JSON.stringify(memory));
+  localStorage.setItem("citadel:agent-memory", JSON.stringify(memory));
 }
 
 function seedAutonomyConfigs() {
@@ -217,5 +221,5 @@ function seedAutonomyConfigs() {
     devops: { systemId: "devops", level: "full-auto", autoApproveThreshold: 25, requireApprovalAbove: 100, maxAutoApprovePerDay: 200, allowedRecipients: [], blockedRecipients: [], emergencyStop: false, lastUpdated: Date.now() },
     payroll: { systemId: "payroll", level: "supervised", autoApproveThreshold: 0, requireApprovalAbove: 0, maxAutoApprovePerDay: 0, allowedRecipients: [], blockedRecipients: [], emergencyStop: false, lastUpdated: Date.now() },
   };
-  localStorage.setItem("***", JSON.stringify(configs));
+  localStorage.setItem("citadel:autonomy-config", JSON.stringify(configs));
 }

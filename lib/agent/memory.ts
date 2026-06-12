@@ -49,11 +49,11 @@ export type AgentMemoryStore = {
   lastUpdated: number;
 };
 
-const STORAGE_KEY = "***";
+const STORAGE_KEY = "citadel:agent-memory";
 
 // ─── Storage ────────────────────────────────────────────────
 
-function getStore(): AgentMemoryStore {
+export function getMemoryStore(): AgentMemoryStore {
   if (typeof window === "undefined") {
     return { decisions: [], patterns: [], learnings: [], lastUpdated: 0 };
   }
@@ -71,6 +71,10 @@ function getStore(): AgentMemoryStore {
   } catch {
     return { decisions: [], patterns: [], learnings: [], lastUpdated: 0 };
   }
+}
+
+function getStore(): AgentMemoryStore {
+  return getMemoryStore();
 }
 
 function saveStore(store: AgentMemoryStore) {

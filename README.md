@@ -1,89 +1,85 @@
 # Citadel
 
-Zero-trust corporate treasury platform for the MetaMask Smart Accounts Kit x 1Shot API x Venice AI hackathon.
+Zero-trust corporate treasury platform — MetaMask Smart Accounts × Venice AI.
 
-Citadel lets CFOs grant granular **ERC-7715 Advanced Permissions** to autonomous systems. Every spend request is audited in real-time by **Venice AI** before optional on-chain execution via **ERC-7710 delegation**.
+CFOs grant **ERC-7715 Advanced Permissions** to autonomous agents. Every spend is audited by **Venice AI** before optional on-chain execution via **ERC-7710 delegation**. High-value spends require **wallet-signed CFO approval** (EIP-712).
 
-## Features
+## Core Flow
 
-- **CFO Dashboard** - Connect MetaMask, manage autonomous systems, grant permissions
-- **ERC-7715 Permission Flow** - `requestExecutionPermissions` with scoped USDC daily limits
-- **Venice AI Compliance Firewall** - Real API audit with approve/block verdict and reasoning
-- **Vendor Payment Flow** - Real-time Venice AI compliance audit with approve/block verdict
-- **Audit Log** - Full decision history with optional Sepolia tx links
+1. **Register Agent** (`/register-agent`) — identity, mandate, ERC-7715 permission
+2. **Run Agent** (`/agent-dashboard`) — autonomous observe → think → audit → execute cycles
+3. **Monitor** (`/dashboard`) — live activity, pending approvals, reports
+4. **Audit Log** (`/audit-log`) — full Venice decision history
 
 ## Tech Stack
 
-- Next.js 15+ (App Router) · TypeScript · Tailwind CSS
+- Next.js 16 (App Router) · TypeScript · Tailwind CSS
 - wagmi + viem + `@metamask/smart-accounts-kit`
-- Venice AI (OpenAI-compatible API)
+- Venice AI · Postgres · Redis · EIP-712 CFO signatures
 
-## Setup
+## Local Development
 
-1. **Install dependencies**
-
-   ```bash
-   npm install
-   ```
-
-2. **Configure environment**
-
-   ```bash
-   cp .env.local.example .env.local
-   ```
-
-   Required variables:
-
-   | Variable | Description |
-   |----------|-------------|
-   | `VENICE_API_KEY` | Venice API key from [venice.ai](https://venice.ai) |
-   | `SESSION_ACCOUNT_PRIVATE_KEY` | Throwaway EOA private key for session account |
-
-   Generate a session key:
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-3. **Run dev server**
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open [http://localhost:3000](http://localhost:3000) - landing page first, then **Connect Wallet** to enter the dashboard
-
-## MetaMask Requirements
-
-- Latest MetaMask extension with **Advanced Permissions (ERC-7715)** support
-- Connected to **Sepolia** testnet
-- User must approve smart account upgrade when granting permissions (ERC-7710 delegation)
-
-## Demo Flow (90 seconds)
-
-| Time | Action |
-|------|--------|
-| 0-15s | Intro: "Citadel - zero-trust treasury for autonomous agents" |
-| 15-35s | Landing → Connect Wallet → Dashboard → Grant Permission → **show MetaMask popup** |
-| 35-55s | Open Marketing System → "Pay vendor 8 USDC" → Venice approves |
-| 55-70s | "Suspicious 50 USDC" → Venice blocks with reasoning |
-| 70-90s | Show Audit Log + optional on-chain execution |
-
-## Project Structure
-
-```
-app/           # Pages and API routes
-components/    # UI, dashboard, permissions, audit
-lib/           # wagmi, MetaMask, Venice, storage
-hooks/         # usePermissions, useVeniceAudit
-types/         # Shared TypeScript types
+```bash
+npm install
+cp .env.local.example .env.local
+npm run infra:up          # Postgres + Redis (optional but recommended)
+npm run db:migrate
+npm run dev
 ```
 
-## Hackathon Tracks
+## Production Deploy
 
-- **Best Agent** - Autonomous system → Venice gate → delegation execution
-- **Best use of Venice AI** - Venice as core compliance engine in main flow
+### Required environment
 
-## License
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis for cron scheduler, SSE, rate limits |
+| `CITADEL_API_SECRET` | Min 16 chars — protects all API mutations |
+| `CRON_SECRET` | Bearer token for `/api/cron/agent-ticks` |
+| `SESSION_ACCOUNT_PRIVATE_KEY` | Session EOA for ERC-7710 execution |
+| `VENICE_API_KEY` or `X402_WALLET_KEY` | Venice AI inference |
+| `NEXT_PUBLIC_APP_URL` | Public app URL |
 
-MIT
+### Recommended production
+
+| Variable | Description |
+|----------|-------------|
+| `CFO_ALLOWED_SIGNERS` | Comma-separated CFO wallet addresses |
+| `SLACK_WEBHOOK_URL` | Slack notifications for approval queue |
+| `ONESHOT_WEBHOOK_SECRET` | HMAC secret for `/api/webhook/oneshot` |
+| `CITADEL_REQUIRE_WALLET_APPROVAL` | `true` (default in production) |
+
+### Deploy steps
+
+```bash
+npm run infra:up
+npm run db:migrate
+npm run build
+npm run start
+```
+
+Set `NODE_ENV=production`. Preflight check: `GET /api/env/preflight`.
+
+Vercel: configure `vercel.json` cron → `/api/cron/agent-ticks` with `CRON_SECRET` header.
+
+### Security model
+
+- All `POST/PATCH/DELETE` on `/api/*` require `CITADEL_API_SECRET` or same-origin
+- `apiGuard` adds rate limiting (120/min) + store hydrate on mutations
+- Deprecated scaffold APIs return **410 Gone** via middleware
+- CFO approvals require EIP-712 wallet signature; optional address allowlist
+- Postgres optimistic locking prevents concurrent write conflicts
+
+## Testing
+
+```bash
+npm test                  # Vitest unit tests
+npm run test:e2e          # Playwright (provide real VENICE_API_KEY for full integration tests)
+```
+
+## Demo Path
+
+`/register-agent` → `/agent-dashboard` → `/dashboard` → approve pending spend → `/audit-log`
+
+Or `/demo` → **Run Live Pipeline**

@@ -8,10 +8,11 @@ import {
   type Address,
   type Hash,
 } from "viem";
-import { sepolia } from "viem/chains";
+import { erc7710WalletActions } from "@metamask/smart-accounts-kit/actions";
 import { getSessionAccount } from "./session-account";
 import { CHAIN, USDC_ADDRESS, USDC_DECIMALS } from "@/lib/constants";
-import { getPermissionForSystem } from "@/lib/storage";
+import { normalizeDelegationPermission } from "./normalize-permission";
+import { withRetry, ResilienceCircuitBreaker } from "@/lib/resilience/error-handler";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -43,14 +44,26 @@ export class ExecutionError extends Error {
   }
 }
 
+// ─── Circuit breaker for on-chain execution (protects against cascading failures) ──
+const executionCircuitBreaker = new ResilienceCircuitBreaker(4, 120_000); // 4 failures → open for 2 minutes
+
 // ─── Execute Delegated Transfer (REAL) ──────────────────────
 
 export async function executeDelegatedTransfer(
-  permission: any,
+  permission: unknown,
   recipient: Address,
   amount: number,
   memo: string,
 ): Promise<ExecutionResult> {
+  const normalized = normalizeDelegationPermission(permission);
+  if (!normalized) {
+    return {
+      txHash: "0x" as Hash,
+      success: false,
+      error: "Invalid delegation permission — missing permissionContext or delegationManager",
+    };
+  }
+
   const sessionAccount = getSessionAccount();
   const amountWei = parseUnits(amount.toString(), USDC_DECIMALS);
 
@@ -69,18 +82,25 @@ export async function executeDelegatedTransfer(
     account: sessionAccount,
     chain: CHAIN,
     transport: http(process.env.SEPOLIA_RPC_URL),
-  });
+  }).extend(erc7710WalletActions());
 
   try {
-    // Execute via ERC-7710 delegation
-    const hash = await walletClient.sendTransactionWithDelegation({
-      account: sessionAccount,
-      chain: CHAIN,
-      to: USDC_ADDRESS,
-      data,
-      permissionContext: permission.permissionContext as `0x${string}`,
-      delegationManager: permission.delegationManager as `0x${string}`,
-    });
+    // Use circuit breaker + retry for production resilience
+    const hash = await executionCircuitBreaker.execute(() =>
+      withRetry(
+        async () => {
+          return await walletClient.sendTransactionWithDelegation({
+            account: sessionAccount,
+            chain: CHAIN,
+            to: USDC_ADDRESS,
+            data,
+            permissionContext: normalized.permissionContext as `0x${string}`,
+            delegationManager: normalized.delegationManager as `0x${string}`,
+          });
+        },
+        { maxRetries: 2, baseDelay: 1500, maxDelay: 8000 }
+      )
+    );
 
     // Wait for real confirmation
     const receipt = await publicClient.waitForTransactionReceipt({

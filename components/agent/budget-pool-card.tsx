@@ -16,7 +16,7 @@ export function BudgetPoolCard({ pool }: Props) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5"
+      className="vault-card"
     >
       <div className="flex items-center gap-3">
         <div className="rounded-lg bg-cyan-500/10 p-2">

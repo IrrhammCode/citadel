@@ -15,7 +15,7 @@ export type SchedulerState = {
   isRunning: boolean;
 };
 
-const STORAGE_KEY = "***";
+const STORAGE_KEY = "citadel:agent-schedules";
 
 // ─── Storage ────────────────────────────────────────────────
 

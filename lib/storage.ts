@@ -48,6 +48,9 @@ export function getPermissions(): StoredPermission[] {
 export function savePermission(permission: StoredPermission) {
   const existing = getPermissions().filter((p) => p.systemId !== permission.systemId);
   writeJson(PERMISSIONS_KEY, [...existing, permission]);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("citadel_storage_updated"));
+  }
 }
 
 export function getPermissionForSystem(systemId: string): StoredPermission | undefined {
@@ -298,7 +301,7 @@ export function updateAgentGoalSpent(systemId: string, amount: number) {
 
 // ─── Activity Feed ──────────────────────────────────────────
 
-const ACTIVITY_KEY = "citade…vity";
+const ACTIVITY_KEY = "citadel:activity";
 
 export function getActivity(limit: number = 50): ActivityEvent[] {
   return readJson<ActivityEvent[]>(ACTIVITY_KEY, []).slice(0, limit);

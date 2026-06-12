@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { executeDelegatedTransfer } from "@/lib/metamask/execute";
+import { apiGuard } from "@/lib/server/api-guard";
+import type { Address } from "viem";
 
 const executeBodySchema = z.object({
   auditId: z.string(),
@@ -15,16 +17,35 @@ const executeBodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const guard = await apiGuard(request);
+  if (guard) return guard;
+
   try {
     const body = executeBodySchema.parse(await request.json());
+    const permission = body.grantedPermissions[0];
 
-    const txHash = await executeDelegatedTransfer(
-      body.spendRequest,
-      // Stored permission context from MetaMask grant flow
-      body.grantedPermissions as Parameters<typeof executeDelegatedTransfer>[1],
+    if (!permission) {
+      return NextResponse.json(
+        { error: "No granted permission context found" },
+        { status: 400 },
+      );
+    }
+
+    const result = await executeDelegatedTransfer(
+      permission,
+      body.spendRequest.recipient as Address,
+      parseFloat(body.spendRequest.amount),
+      body.spendRequest.memo,
     );
 
-    return NextResponse.json({ txHash, auditId: body.auditId });
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error ?? "Execution failed" },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ txHash: result.txHash, auditId: body.auditId });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

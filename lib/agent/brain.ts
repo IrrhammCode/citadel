@@ -177,17 +177,19 @@ export function clearDecisionCache(): void {
 // ─── Agent Brain ────────────────────────────────────────────
 
 export async function think(state: AgentState): Promise<AgentDecision> {
-  // Check cache first to avoid redundant API calls
+  const { decision } = await thinkWithMetrics(state);
+  return decision;
+}
+
+export async function thinkWithMetrics(
+  state: AgentState,
+): Promise<{ decision: AgentDecision; tokens: number }> {
   const cached = decisionCache.get(state);
   if (cached) {
-    console.log("[brain] Returning cached decision");
-    return cached;
+    return { decision: cached, tokens: 0 };
   }
 
-  // Enrich state with vendor research via Venice Web Search
   const enrichedState = await enrichStateWithResearch(state);
-
-  // Get memory context
   const memoryContext = getMemoryContext(state.systemId);
   if (memoryContext.length > 0) {
     enrichedState.knowledge = [
@@ -199,26 +201,46 @@ export async function think(state: AgentState): Promise<AgentDecision> {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(enrichedState);
 
-  // Make the actual Venice AI API call with retry logic
-  const decision = await withRetry(
-    () => callVeniceAI(systemPrompt, userPrompt),
+  let totalTokens = 0;
+  const primary = await withRetry(
+    () => callVeniceAIWithMetrics(systemPrompt, userPrompt),
     "think",
   );
+  let decision = primary.decision;
+  totalTokens += primary.tokens;
 
-  // Cache the result
+  try {
+    const critiquePrompt = `You are a senior treasury risk officer. Critique the following agent decision for ${state.systemId}.
+Decision: ${JSON.stringify(decision, null, 2)}
+State summary: budget remaining ${(state.budget.remaining / state.budget.total * 100).toFixed(1)}%, ${state.kpis.filter(k => k.status !== "met").length} KPIs off target.
+
+Respond with improved or confirmed JSON decision only. Be more conservative if risk is high.`;
+
+    const critique = await callVeniceAIWithMetrics(
+      "You improve autonomous treasury agent decisions. Always return valid JSON matching the original schema.",
+      critiquePrompt,
+    );
+    totalTokens += critique.tokens;
+
+    if (critique.decision.confidence >= decision.confidence - 0.1) {
+      decision = critique.decision;
+    }
+  } catch {
+    /* critique optional */
+  }
+
   decisionCache.set(state, decision);
-
-  return decision;
+  return { decision, tokens: totalTokens };
 }
 
 /**
  * Call Venice AI API for a decision. Tries x402 wallet auth first,
  * falls back to API key auth. Handles response parsing and validation.
  */
-async function callVeniceAI(
+async function callVeniceAIWithMetrics(
   systemPrompt: string,
   userPrompt: string,
-): Promise<AgentDecision> {
+): Promise<{ decision: AgentDecision; tokens: number }> {
   const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
   const messages = [
     { role: "system" as const, content: systemPrompt },
@@ -226,13 +248,13 @@ async function callVeniceAI(
   ];
 
   let rawContent: string;
+  let tokens = 0;
 
-  // Try x402 wallet auth first, fall back to API key
   try {
     getVeniceX402Client();
     rawContent = await veniceX402Chat(messages, model);
+    tokens = Math.ceil((systemPrompt.length + userPrompt.length + rawContent.length) / 4);
   } catch {
-    // x402 not available — use API key client
     const client = getVeniceClient();
     const response = await client.chat.completions.create({
       model,
@@ -241,14 +263,15 @@ async function callVeniceAI(
       messages,
     });
     rawContent = response.choices[0]?.message?.content ?? "";
+    tokens = response.usage?.total_tokens ?? 0;
   }
 
   if (!rawContent) {
     throw new Error("Venice AI returned empty response");
   }
 
-  // Parse and validate the response
-  return parseDecision(rawContent, systemPrompt, userPrompt);
+  const decision = await parseDecision(rawContent, systemPrompt, userPrompt);
+  return { decision, tokens };
 }
 
 /**
@@ -269,25 +292,30 @@ async function parseDecision(
       parseErr instanceof Error ? parseErr.message : parseErr);
   }
 
-  // Second attempt: ask Venice to fix the JSON
-  const client = getVeniceClient();
   const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
+  const fixMessages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: userPrompt },
+    {
+      role: "user" as const,
+      content: `The previous response was invalid JSON. Fix and return valid JSON only. Previous response:\n${rawContent.slice(0, 2000)}`,
+    },
+  ];
 
-  const fixResponse = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-      {
-        role: "user",
-        content: `The previous response was invalid JSON. Fix and return valid JSON only. Previous response:\n${rawContent.slice(0, 2000)}`,
-      },
-    ],
-  });
-
-  const fixContent = fixResponse.choices[0]?.message?.content;
+  let fixContent: string | undefined;
+  try {
+    getVeniceX402Client();
+    fixContent = await veniceX402Chat(fixMessages, model);
+  } catch {
+    const client = getVeniceClient();
+    const fixResponse = await client.chat.completions.create({
+      model,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: fixMessages,
+    });
+    fixContent = fixResponse.choices[0]?.message?.content ?? undefined;
+  }
   if (!fixContent) {
     throw new Error("Venice AI fix-up call returned empty response");
   }

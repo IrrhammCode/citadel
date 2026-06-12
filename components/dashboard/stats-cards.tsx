@@ -2,113 +2,85 @@
 
 import { useAccount } from "wagmi";
 import { motion } from "framer-motion";
-import { Shield, Bot, AlertTriangle, CheckCircle2, Wallet, TrendingUp } from "lucide-react";
+import { Shield, Bot, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getAuditLog, getBudgetPool, getAnomalies } from "@/lib/storage";
+import { useServerStore } from "@/hooks/useServerStore";
+import { getAuditLog } from "@/lib/storage";
 import { useEffect, useState } from "react";
 import { Stagger, StaggerItem } from "@/components/motion/motion";
 
 export function StatsCards() {
   const { isConnected } = useAccount();
   const { permissions } = usePermissions();
-  const [stats, setStats] = useState([
-    { title: "Treasury Status", value: "Disconnected", icon: Shield, accent: "text-zinc-500" },
-    { title: "Active Permissions", value: "0", icon: Bot, accent: "text-emerald-400" },
-    { title: "Budget Pool", value: "0 USDC", icon: Wallet, accent: "text-cyan-400" },
-    { title: "Anomalies", value: "0", icon: AlertTriangle, accent: "text-amber-400" },
-    { title: "Approved Today", value: "0", icon: CheckCircle2, accent: "text-emerald-400" },
-    { title: "Avg Trust Score", value: "0", icon: TrendingUp, accent: "text-purple-400" },
-  ]);
+  const { store } = useServerStore(5000);
+  const [blockedToday, setBlockedToday] = useState(0);
+  const [approvedToday, setApprovedToday] = useState(0);
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const log = getAuditLog();
-    const pool = getBudgetPool();
-    const anomalies = getAnomalies();
+    const log = store?.auditLog?.length ? store.auditLog : getAuditLog();
+    setBlockedToday(
+      log.filter(
+        (r) =>
+          r.verdict.decision === "blocked" &&
+          new Date(r.timestamp).toISOString().slice(0, 10) === today,
+      ).length,
+    );
+    setApprovedToday(
+      log.filter(
+        (r) =>
+          r.verdict.decision === "approved" &&
+          new Date(r.timestamp).toISOString().slice(0, 10) === today,
+      ).length,
+    );
+  }, [permissions, store]);
 
-    const approvedToday = log.filter(
-      (r) =>
-        r.verdict.decision === "approved" &&
-        new Date(r.timestamp).toISOString().slice(0, 10) === today,
-    ).length;
-
-    const unresolvedAnomalies = anomalies.filter((a) => !a.resolved).length;
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStats([
-      {
-        title: "Treasury Status",
-        value: isConnected ? "Connected" : "Disconnected",
-        icon: Shield,
-        accent: isConnected ? "text-emerald-400" : "text-zinc-500",
-      },
-      {
-        title: "Active Permissions",
-        value: permissions.length.toString(),
-        icon: Bot,
-        accent: "text-emerald-400",
-      },
-      {
-        title: "Budget Pool",
-        value: `${pool.totalBudget} USDC`,
-        icon: Wallet,
-        accent: "text-cyan-400",
-      },
-      {
-        title: "Anomalies",
-        value: unresolvedAnomalies.toString(),
-        icon: AlertTriangle,
-        accent: unresolvedAnomalies > 0 ? "text-red-400" : "text-emerald-400",
-      },
-      {
-        title: "Approved Today",
-        value: approvedToday.toString(),
-        icon: CheckCircle2,
-        accent: "text-emerald-400",
-      },
-      {
-        title: "Avg Trust Score",
-        value: "73",
-        icon: TrendingUp,
-        accent: "text-purple-400",
-      },
-    ]);
-  }, [permissions, isConnected]);
+  const stats = [
+    {
+      title: "Treasury Status",
+      value: isConnected ? "Secured" : "Offline",
+      icon: Shield,
+      accent: isConnected ? "text-gold-400" : "text-zinc-600",
+    },
+    {
+      title: "Active Permissions",
+      value: permissions.length.toString(),
+      icon: Bot,
+      accent: "text-emerald-400",
+    },
+    {
+      title: "Approved Today",
+      value: approvedToday.toString(),
+      icon: CheckCircle2,
+      accent: "text-emerald-400",
+    },
+    {
+      title: "Blocked Today",
+      value: blockedToday.toString(),
+      icon: AlertTriangle,
+      accent: "text-red-400",
+    },
+  ];
 
   return (
-    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" stagger={0.08}>
+    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" stagger={0.08}>
       {stats.map(({ title, value, icon: Icon, accent }) => (
         <StaggerItem key={title}>
-          <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ duration: 0.2 }}
-            data-active={
-              (title === "Treasury Status" && value === "Connected") ||
-              (title === "Anomalies" && value === "0") ||
-              (title === "Approved Today" && value !== "0")
-                ? "true"
-                : undefined
-            }
-          >
-            <Card className="group overflow-hidden border-zinc-800 transition-all duration-200 hover:border-emerald-500/10 hover:shadow-[0_0_20px_rgba(16,185,129,0.08)] hover:shadow-emerald-500/5 data-[active=true]:shadow-[0_0_24px_rgba(16,185,129,0.15)] data-[active=true]:border-emerald-500/20">
+          <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.25 }}>
+            <Card className="overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors duration-200">
+                <CardTitle className="text-xs font-medium tracking-wider text-zinc-500 uppercase">
                   {title}
                 </CardTitle>
-                <motion.div
-                  animate={{ rotate: [0, 5, -5, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Icon className={`h-4 w-4 ${accent}`} />
-                </motion.div>
+                <Icon className={`h-4 w-4 ${accent}`} />
               </CardHeader>
               <CardContent>
                 <motion.p
                   key={value}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`text-2xl font-bold ${accent}`}
+                  className={`font-display text-3xl font-medium ${accent}`}
                 >
                   {value}
                 </motion.p>

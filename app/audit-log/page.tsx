@@ -1,29 +1,31 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { PageSection } from "@/components/layout/page-section";
 import { AuditLogTable } from "@/components/audit/audit-log-table";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FadeIn } from "@/components/motion/motion";
+import { PipelineGuide } from "@/components/flow/pipeline-guide";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function AuditLogPage() {
   return (
     <AppShell
       title="Audit Log"
-      description="Complete history of Venice AI compliance decisions."
+      description="Step 4 — Complete history of Venice AI decisions with full reasoning."
     >
-      <FadeIn>
-        <Card>
-          <CardHeader>
-            <CardTitle>Compliance Decisions</CardTitle>
-            <CardDescription>
-              Every spend request audited by Venice AI with approve/block reasoning.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AuditLogTable />
-          </CardContent>
-        </Card>
-      </FadeIn>
+      <div className="space-y-6">
+        <PipelineGuide compact />
+
+        <PageSection
+          title="Riwayat Keputusan"
+          description="Semua spend request yang diaudit Venice AI — approved atau blocked."
+        >
+          <Card>
+            <CardContent className="p-0 pt-6">
+              <AuditLogTable />
+            </CardContent>
+          </Card>
+        </PageSection>
+      </div>
     </AppShell>
   );
 }

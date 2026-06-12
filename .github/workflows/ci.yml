@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: citadel
+          POSTGRES_PASSWORD: citadel
+          POSTGRES_DB: citadel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Migrate database
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://citadel:citadel@localhost:5432/citadel
+
+      - run: npm test
+
+      - run: npm run lint
+
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://citadel:citadel@localhost:5432/citadel
+          REDIS_URL: redis://localhost:6379
+          CITADEL_API_SECRET: ci-secret-min-16-chars
+          CRON_SECRET: ci-cron-secret
+          SESSION_ACCOUNT_PRIVATE_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          VENICE_API_KEY: test-key-for-ci-build
+          CFO_ALLOWED_SIGNERS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+          SLACK_WEBHOOK_URL: https://hooks.slack.com/services/CI/TEST/WEBHOOK
+          ONESHOT_WEBHOOK_SECRET: ci-oneshot-webhook-secret
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: E2E
+        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          DATABASE_URL: postgresql://citadel:citadel@localhost:5432/citadel
+          REDIS_URL: redis://localhost:6379
+          CITADEL_API_SECRET: ci-secret-min-16-chars
+          CRON_SECRET: ci-cron-secret
+          SESSION_ACCOUNT_PRIVATE_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          VENICE_API_KEY: test-key-for-ci-build
+          E2E_MOCK_VENICE: "true"
+          CITADEL_REQUIRE_WALLET_APPROVAL: "true"
+          CFO_ALLOWED_SIGNERS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+          SLACK_WEBHOOK_URL: https://hooks.slack.com/services/CI/TEST/WEBHOOK
+          ONESHOT_WEBHOOK_SECRET: ci-oneshot-webhook-secret

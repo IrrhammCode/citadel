@@ -18,12 +18,9 @@ export function ConnectButton() {
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-3"
       >
-        <motion.div
-          layout
-          className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-300"
-        >
+        <div className="premium-glass rounded-xl px-3 py-2 font-mono text-xs text-[--text-secondary]">
           {address.slice(0, 6)}...{address.slice(-4)}
-        </motion.div>
+        </div>
         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
           <Button variant="outline" size="sm" onClick={() => disconnect()}>
             Disconnect
@@ -36,6 +33,7 @@ export function ConnectButton() {
   return (
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
       <Button
+        variant="emerald"
         onClick={() => connect({ connector: injected() })}
         disabled={isPending}
       >

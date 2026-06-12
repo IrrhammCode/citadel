@@ -1,25 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 import type { StoredPermission } from "@/types/permission";
 import { getPermissions } from "@/lib/storage";
+import { useServerStore } from "@/hooks/useServerStore";
 
 export function usePermissions() {
-  const [permissions, setPermissions] = useState<StoredPermission[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const { store, loaded, refresh } = useServerStore();
 
-  const refresh = useCallback(() => {
-    setPermissions(getPermissions());
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refresh();
-    const onStorage = () => refresh();
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [refresh]);
+  const permissions = useMemo<StoredPermission[]>(() => {
+    if (store?.permissions?.length) return store.permissions;
+    return getPermissions();
+  }, [store]);
 
   return { permissions, loaded, refresh };
 }

@@ -1,5 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { runServerCycle } from "@/lib/agent/server-cycle";
+import {
+  getAllAgentLoopStatuses,
+  saveAgentLoopStatus,
+  getServerPermission,
+  hydrateServerStore,
+  type AgentLoopStatus,
+} from "@/lib/server/store";
+import {
+  scheduleAgentRun,
+  unscheduleAgentRun,
+  isRedisConfigured,
+} from "@/lib/server/redis";
+import { apiGuard } from "@/lib/server/api-guard";
 
 const startSchema = z.object({
   systemId: z.string(),
@@ -10,156 +24,169 @@ const stopSchema = z.object({
   systemId: z.string(),
 });
 
-// In-memory store for agent statuses (persists during server lifetime)
-// Note: In production, this would be in a database
-const agentStatuses: Record<string, {
-  systemId: string;
-  isRunning: boolean;
-  cycleCount: number;
-  lastCycle: number;
-  startedAt: number;
-}> = {};
+const agentIntervals: Record<string, ReturnType<typeof setInterval>> = {};
 
-// ── GET — Get all agent statuses ────────────────────────────
+function useInProcessScheduler(): boolean {
+  return !isRedisConfigured();
+}
 
-export async function GET() {
+function startInProcessInterval(systemId: string, intervalMinutes: number) {
+  if (agentIntervals[systemId]) clearInterval(agentIntervals[systemId]);
+  agentIntervals[systemId] = setInterval(
+    () => runCycle(systemId).catch((e) => console.error(`[agent-loop] ${systemId}:`, e)),
+    intervalMinutes * 60 * 1000,
+  );
+}
+
+async function runCycle(systemId: string) {
+  await hydrateServerStore();
   try {
-    return NextResponse.json(agentStatuses);
+    const result = await runServerCycle(systemId);
+    const statuses = getAllAgentLoopStatuses();
+    const current = statuses[systemId];
+    if (current) {
+      saveAgentLoopStatus({
+        ...current,
+        cycleCount: current.cycleCount + 1,
+        lastCycle: Date.now(),
+        lastError: undefined,
+      });
+    }
+    return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to get statuses";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Cycle failed";
+    const statuses = getAllAgentLoopStatuses();
+    const current = statuses[systemId];
+    if (current) {
+      saveAgentLoopStatus({ ...current, lastError: msg });
+    }
+    throw error;
   }
 }
 
-// ── POST — Start an agent ───────────────────────────────────
+export async function GET() {
+  await hydrateServerStore();
+  return NextResponse.json(getAllAgentLoopStatuses());
+}
 
 export async function POST(request: Request) {
+  const guard = await apiGuard(request);
+  if (guard) return guard;
+
   try {
     const body = startSchema.parse(await request.json());
     const { systemId, intervalMinutes = 60 } = body;
 
-    // Update status
-    agentStatuses[systemId] = {
+    if (!getServerPermission(systemId)) {
+      return NextResponse.json(
+        { error: "No permission granted for this agent. Register via /register-agent first." },
+        { status: 400 },
+      );
+    }
+
+    const prev = getAllAgentLoopStatuses()[systemId];
+    const status: AgentLoopStatus = {
       systemId,
       isRunning: true,
-      cycleCount: agentStatuses[systemId]?.cycleCount ?? 0,
+      cycleCount: prev?.cycleCount ?? 0,
       lastCycle: Date.now(),
-      startedAt: Date.now(),
+      startedAt: prev?.startedAt ?? Date.now(),
+      intervalMinutes,
     };
+    saveAgentLoopStatus(status);
 
-    // In production, this would start a background job
-    // For now, we simulate the agent starting
-    console.log(`🚀 Agent ${systemId} started (interval: ${intervalMinutes}min)`);
+    try {
+      await runCycle(systemId);
+    } catch (err) {
+      console.warn(`[agent-loop] Initial cycle failed for ${systemId}:`, err);
+    }
+
+    if (useInProcessScheduler()) {
+      startInProcessInterval(systemId, intervalMinutes);
+    } else {
+      await scheduleAgentRun(systemId, intervalMinutes);
+    }
 
     return NextResponse.json({
       success: true,
-      agent: agentStatuses[systemId],
+      agent: getAllAgentLoopStatuses()[systemId],
+      scheduler: useInProcessScheduler() ? "in-process" : "redis",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid request body", details: error.flatten() },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid body", details: error.flatten() }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "Failed to start agent";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// ── DELETE — Stop an agent ──────────────────────────────────
-
 export async function DELETE(request: Request) {
+  const guard = await apiGuard(request);
+  if (guard) return guard;
+
   try {
     const body = stopSchema.parse(await request.json());
     const { systemId } = body;
 
-    if (agentStatuses[systemId]) {
-      agentStatuses[systemId].isRunning = false;
+    if (agentIntervals[systemId]) {
+      clearInterval(agentIntervals[systemId]);
+      delete agentIntervals[systemId];
     }
+    await unscheduleAgentRun(systemId);
 
-    console.log(`⏹️ Agent ${systemId} stopped`);
+    const current = getAllAgentLoopStatuses()[systemId];
+    if (current) {
+      saveAgentLoopStatus({ ...current, isRunning: false });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid request body", details: error.flatten() },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid body", details: error.flatten() }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : "Failed to stop agent";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// ── PATCH — Run single cycle ────────────────────────────────
-
 export async function PATCH(request: Request) {
+  const guard = await apiGuard(request);
+  if (guard) return guard;
+
   try {
     const body = await request.json();
-    const { systemId } = body;
+    const { systemId } = body as { systemId: string };
 
-    // Increment cycle count
-    if (agentStatuses[systemId]) {
-      agentStatuses[systemId].cycleCount++;
-      agentStatuses[systemId].lastCycle = Date.now();
-    } else {
-      agentStatuses[systemId] = {
+    if (!systemId) {
+      return NextResponse.json({ error: "systemId required" }, { status: 400 });
+    }
+
+    if (!getServerPermission(systemId)) {
+      return NextResponse.json(
+        { error: "No permission granted for this agent." },
+        { status: 400 },
+      );
+    }
+
+    const prev = getAllAgentLoopStatuses()[systemId];
+    if (!prev) {
+      saveAgentLoopStatus({
         systemId,
         isRunning: false,
-        cycleCount: 1,
+        cycleCount: 0,
         lastCycle: Date.now(),
         startedAt: Date.now(),
-      };
-    }
-
-    // Call the think API to get a real decision
-    try {
-      const thinkRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/agent/think`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          state: {
-            systemId,
-            systemName: systemId,
-            goal: `Manage ${systemId} operations`,
-            budget: { total: 500, remaining: 350, spent: 150 },
-            kpis: [
-              { name: "Efficiency", target: 95, current: 88, unit: "%", isHigherBetter: true, status: "behind" },
-            ],
-            pendingTasks: [],
-            recentTransactions: [],
-          },
-        }),
       });
-
-      if (thinkRes.ok) {
-        const decision = await thinkRes.json();
-        
-        // Store the decision in memory
-        const memoryRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/agent/memory`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemId,
-            decision,
-          }),
-        });
-
-        return NextResponse.json({
-          success: true,
-          agent: agentStatuses[systemId],
-          decision,
-        });
-      }
-    } catch (thinkError) {
-      console.warn("Think API failed, returning status only:", thinkError);
     }
+
+    const result = await runCycle(systemId);
 
     return NextResponse.json({
       success: true,
-      agent: agentStatuses[systemId],
+      agent: getAllAgentLoopStatuses()[systemId],
+      decision: result.decision,
+      outcomes: result.outcomes,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to run cycle";

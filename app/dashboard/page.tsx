@@ -1,96 +1,132 @@
 "use client";
 
-import { useAccount } from "wagmi";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { AppShell } from "@/components/layout/app-shell";
+import { PageSection } from "@/components/layout/page-section";
 import { StatsCards } from "@/components/dashboard/stats-cards";
-import { SystemsList } from "@/components/dashboard/systems-list";
 import { BudgetPoolCard } from "@/components/agent/budget-pool-card";
 import { AnomalyAlerts } from "@/components/agent/anomaly-alerts";
 import { PermissionCard } from "@/components/permissions/permission-card";
+import { ActivityFeed } from "@/components/agent/activity-feed";
+import { ApprovalQueue } from "@/components/agent/approval-queue";
+import { RecentReports } from "@/components/agent/recent-reports";
+import { PipelineGuide } from "@/components/flow/pipeline-guide";
+import { EnvPreflight } from "@/components/env/env-preflight";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useServerStore } from "@/hooks/useServerStore";
 import { getBudgetPool, getAnomalies } from "@/lib/storage";
-import { LandingCta } from "@/components/landing/landing-cta";
 import { Stagger, StaggerItem } from "@/components/motion/motion";
-import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScrollText, Activity, UserPlus } from "lucide-react";
 
 export default function DashboardPage() {
-  const { isConnected } = useAccount();
   const { permissions } = usePermissions();
-  const pool = getBudgetPool();
+  const { store } = useServerStore();
+  const pool = store?.budgetPool ?? getBudgetPool();
   const anomalies = getAnomalies();
 
   return (
     <AppShell
-      title="AI CFO Dashboard"
-      description="Autonomous treasury management with goals, trust scores, and multi-agent coordination."
+      title="Monitor & Results"
+      description="Step 3 — Track agent activity, audits, and treasury performance."
     >
       <div className="space-y-8">
-        {!isConnected && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex items-start gap-3">
-              <motion.div
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 3, repeat: Infinity }}
-              >
-                <Shield className="mt-0.5 h-5 w-5 text-amber-400" />
-              </motion.div>
-              <div>
-                <p className="font-medium text-zinc-200">Connect your treasury wallet</p>
-                <p className="text-sm text-zinc-400">
-                  Connect MetaMask to grant Advanced Permissions and manage autonomous agents.
-                </p>
-              </div>
+        <EnvPreflight />
+
+        {/* Flow guide */}
+        <PipelineGuide />
+
+        {/* Live activity — primary deliverable */}
+        <PageSection
+          title="Live Activity"
+          description="Real-time results from agent cycles — audits, executions, and reports."
+          action={
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/audit-log">
+                  <ScrollText className="h-3.5 w-3.5" />
+                  Audit Log
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/agent-dashboard">
+                  <Activity className="h-3.5 w-3.5" />
+                  Agent Control
+                </Link>
+              </Button>
             </div>
-            <LandingCta />
-          </motion.div>
-        )}
+          }
+        >
+          <ActivityFeed limit={12} pollIntervalMs={5000} />
+        </PageSection>
 
-        <StatsCards />
+        {/* Pending approvals */}
+        <PageSection
+          title="Pending Approvals"
+          description="Spends blocked by autonomy policy — approve to execute on-chain."
+        >
+          <ApprovalQueue />
+        </PageSection>
 
-        {/* Budget Pool + Anomalies */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <BudgetPoolCard pool={pool} />
-          <div className="space-y-4">
+        {/* Auto reports */}
+        <PageSection
+          title="Agent Reports"
+          description="Venice-generated reports after spending milestones."
+        >
+          <RecentReports limit={3} />
+        </PageSection>
+
+        {/* Overview */}
+        <PageSection
+          title="Overview"
+          description="Treasury status and today's decisions."
+        >
+          <StatsCards />
+        </PageSection>
+
+        {/* Budget & Alerts */}
+        <PageSection
+          title="Budget & Alerts"
+          description="Budget allocation and detected anomalies."
+        >
+          <div className="grid gap-4 lg:grid-cols-2">
+            <BudgetPoolCard pool={pool} />
             <AnomalyAlerts anomalies={anomalies} />
           </div>
-        </div>
+        </PageSection>
 
-        <SystemsList />
-
-        {permissions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
+        {/* Active permissions */}
+        {permissions.length > 0 ? (
+          <PageSection
+            title="Active Permissions"
+            description={`${permissions.length} agents with active ERC-7715 permissions.`}
           >
-            <h2 className="mb-4 text-lg font-semibold text-zinc-100">
-              Active Permissions
-            </h2>
-            <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
+            <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
               {permissions.map((p) => (
                 <StaggerItem key={p.id}>
                   <PermissionCard permission={p} />
                 </StaggerItem>
               ))}
             </Stagger>
-          </motion.div>
+          </PageSection>
+        ) : (
+          <PageSection
+            title="No Agents Yet"
+            description="Get started by registering your first agent."
+          >
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 p-8 text-center">
+              <p className="text-sm text-zinc-500">
+                No active permissions yet. Register an agent to begin the workflow.
+              </p>
+              <Button variant="emerald" size="sm" className="mt-4" asChild>
+                <Link href="/register-agent">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Register Agent
+                </Link>
+              </Button>
+            </div>
+          </PageSection>
         )}
-
-        <motion.div
-          className="text-center"
-          whileHover={{ scale: 1.02 }}
-        >
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/">← Back to landing</Link>
-          </Button>
-        </motion.div>
       </div>
     </AppShell>
   );

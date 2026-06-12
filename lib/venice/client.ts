@@ -268,11 +268,11 @@ export class VeniceClient {
 
   async chatJSON<T>(
     options: VeniceChatOptions & { schema?: z.ZodType<T> },
-  ): Promise<T> {
+  ): Promise<{ data: T; tokens: number }> {
     const response = await this.chat({
       ...options,
       responseFormat: { type: "json_object" },
-      skipCache: true, // JSON responses should not be cached by default
+      skipCache: true,
     });
 
     const content = response.choices[0]?.message?.content;
@@ -280,14 +280,13 @@ export class VeniceClient {
       throw new VeniceClientError("Empty response from Venice", "EMPTY_RESPONSE");
     }
 
+    const tokens = response.usage?.total_tokens ?? 0;
+
     try {
       const parsed = JSON.parse(content);
-      if (options.schema) {
-        return options.schema.parse(parsed);
-      }
-      return parsed as T;
-    } catch (parseError) {
-      // Retry once with explicit JSON instruction
+      const data = options.schema ? options.schema.parse(parsed) : (parsed as T);
+      return { data, tokens };
+    } catch {
       const retryResponse = await this.chat({
         ...options,
         messages: [
@@ -306,10 +305,9 @@ export class VeniceClient {
 
       try {
         const retryParsed = JSON.parse(retryContent);
-        if (options.schema) {
-          return options.schema.parse(retryParsed);
-        }
-        return retryParsed as T;
+        const data = options.schema ? options.schema.parse(retryParsed) : (retryParsed as T);
+        const retryTokens = tokens + (retryResponse.usage?.total_tokens ?? 0);
+        return { data, tokens: retryTokens };
       } catch {
         throw new VeniceClientError(
           `Failed to parse Venice JSON response: ${retryContent.slice(0, 200)}`,
@@ -424,10 +422,10 @@ export function getVeniceClient(): VeniceClient {
 }
 
 /**
- * Check if Venice is configured (has API key)
+ * Check if Venice is configured (API key or x402 wallet)
  */
 export function isVeniceConfigured(): boolean {
-  return !!process.env.VENICE_API_KEY;
+  return !!(process.env.VENICE_API_KEY || process.env.X402_WALLET_KEY);
 }
 
 /**
@@ -469,7 +467,7 @@ export async function auditSpendRequest(
   const client = getVeniceClient();
 
   // Use chatJSON which handles retry, JSON parsing, and schema validation
-  return client.chatJSON({
+  const result = await client.chatJSON({
     model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
     temperature: 0.1,
     schema: verdictSchema,
@@ -478,6 +476,7 @@ export async function auditSpendRequest(
       { role: "user", content: buildComplianceUserPrompt(body) },
     ],
   });
+  return result.data;
 }
 
 // ─── Enhanced: Compliance + Pattern + Anomaly ───────────────
@@ -509,8 +508,9 @@ export async function auditEnhanced(
     tatumIntelligence?: { isMalicious: boolean; maliciousDetails?: string; transactionCount: number; ensName?: string; riskLevel: string };
     simulation?: { success: boolean; gasUsed: string; error?: string };
   },
-): Promise<EnhancedVerdict> {
-  const client = getVeniceClient();
+): Promise<{ verdict: EnhancedVerdict; tokens: number }> {
+  const estimateTokens = (...parts: string[]) =>
+    parts.reduce((sum, p) => sum + Math.ceil(p.length / 4), 0);
 
   // Try to get on-chain verification via Venice Crypto RPC
   let onChainData = body.onChainVerification;
@@ -617,15 +617,32 @@ Be conservative: when in doubt, block. Approved only when clearly within policy.
     2,
   );
 
-  return client.chatJSON({
-    model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: userPrompt },
+  ];
+  const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
+
+  if (isX402Available()) {
+    const { veniceX402Chat } = await import("@/lib/venice/x402");
+    const raw = await veniceX402Chat(messages, model);
+    const jsonMatch = raw.trim().match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? jsonMatch[0] : raw.trim();
+    const verdict = enhancedVerdictSchema.parse(JSON.parse(jsonStr));
+    return {
+      verdict,
+      tokens: estimateTokens(systemPrompt, userPrompt, raw),
+    };
+  }
+
+  const client = getVeniceClient();
+  const result = await client.chatJSON({
+    model,
     temperature: 0.1,
     schema: enhancedVerdictSchema,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
+    messages,
   });
+  return { verdict: result.data, tokens: result.tokens };
 }
 
 // ─── Spending Pattern Analysis ──────────────────────────────
@@ -861,7 +878,7 @@ Respond with JSON:
 Consider: trust scores, ROI performance, reason quality, budget availability.`;
 
   try {
-    return await client.chatJSON({
+    const result = await client.chatJSON({
       model: process.env.VENICE_MODEL ?? "llama-3.3-70b",
       temperature: 0.1,
       schema: negotiationResultSchema,
@@ -870,6 +887,7 @@ Consider: trust scores, ROI performance, reason quality, budget availability.`;
         { role: "user", content: prompt },
       ],
     });
+    return result.data;
   } catch (error) {
     return {
       approved: false,
@@ -955,4 +973,43 @@ export async function checkAddressReputation(address: string): Promise<{
   }
 
   return { isKnown: true, reputation: "neutral", details: result.summary };
+}
+
+// ─── Standalone Venice Image Generation (visual intelligence) ──
+export async function generateTreasuryVisual(
+  prompt: string,
+  options?: { width?: number; height?: number },
+): Promise<{ url: string; prompt: string }> {
+  const apiKey = process.env.VENICE_API_KEY;
+  if (!apiKey) throw new Error("VENICE_API_KEY required for image generation");
+
+  const model = "flux-dev";
+  const payload = {
+    model,
+    prompt,
+    width: options?.width ?? 1024,
+    height: options?.height ?? 768,
+    steps: 20,
+    cfg_scale: 7.5,
+  };
+
+  const res = await fetch("https://api.venice.ai/api/v1/image/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Venice image generation failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  const url = data?.data?.[0]?.url || data?.url;
+
+  if (!url) throw new Error("No image URL from Venice");
+
+  return { url, prompt };
 }
