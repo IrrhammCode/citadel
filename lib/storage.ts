@@ -284,13 +284,9 @@ export function updateNegotiationStatus(id: string, status: NegotiationRequest["
 export function getBudgetPool(): BudgetPool {
   return readJson<BudgetPool>(BUDGET_POOL_KEY, {
     totalBudget: 1000,
-    allocated: 1000,
-    unallocated: 0,
-    allocations: [
-      { systemId: "marketing", amount: 500 },
-      { systemId: "devops", amount: 300 },
-      { systemId: "payroll", amount: 200 },
-    ],
+    allocated: 0,
+    unallocated: 1000,
+    allocations: [],
   });
 }
 

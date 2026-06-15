@@ -3,13 +3,14 @@
 import { motion } from "framer-motion";
 import { Wallet, ArrowRight } from "lucide-react";
 import type { BudgetPool } from "@/types/agent";
-import { AUTONOMOUS_SYSTEMS } from "@/types/system";
+import { useSystems } from "@/hooks/useSystems";
 
 type Props = {
   pool: BudgetPool;
 };
 
 export function BudgetPoolCard({ pool }: Props) {
+  const { systems } = useSystems();
   const usagePercent = pool.totalBudget > 0 ? (pool.allocated / pool.totalBudget) * 100 : 0;
 
   return (
@@ -56,7 +57,7 @@ export function BudgetPoolCard({ pool }: Props) {
       {/* Allocations */}
       <div className="mt-4 space-y-2">
         {pool.allocations.map((alloc, i) => {
-          const system = AUTONOMOUS_SYSTEMS.find((s) => s.id === alloc.systemId);
+          const system = systems.find((s) => s.id === alloc.systemId);
           const colors = ["text-cyan-400", "text-emerald-400", "text-amber-400", "text-purple-400"];
           const bgColors = ["bg-cyan-500/10", "bg-emerald-500/10", "bg-amber-500/10", "bg-purple-500/10"];
           return (
