@@ -16,7 +16,7 @@ type LandingCtaProps = {
 function getPostConnectPath(): string {
   if (typeof window === "undefined") return "/register-agent";
   const hasPermission = getPermissions().length > 0;
-  return hasPermission ? "/dashboard" : "/register-agent";
+  return hasPermission ? "/settings" : "/register-agent";
 }
 
 export function LandingCta({ size = "default", variant = "primary" }: LandingCtaProps) {
@@ -35,7 +35,7 @@ export function LandingCta({ size = "default", variant = "primary" }: LandingCta
   const content = isConnected ? (
     <>
       <span className="relative z-10 font-medium">
-        {getPermissions().length > 0 ? "Open Dashboard" : "Register Agent"}
+        {getPermissions().length > 0 ? "Open Settings" : "Register Agent"}
       </span>
       <ArrowRight className="h-4 w-4" />
     </>
