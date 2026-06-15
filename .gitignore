@@ -41,6 +41,8 @@ lint-results.json
 .env
 .env.local
 .env.*.local
+.vercel.env
+vercel-env.txt
 !.env.local.example
 
 # vercel
