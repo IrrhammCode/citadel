@@ -5,7 +5,8 @@ import { DEFAULT_STORE } from "@/lib/server/store-types";
 import type { StoreBackend } from "@/lib/server/backends/types";
 import { withStoreLock } from "@/lib/server/lock";
 
-const STORE_DIR = join(process.cwd(), ".data");
+const isProd = process.env.NODE_ENV === "production";
+const STORE_DIR = isProd ? "/tmp" : join(process.cwd(), ".data");
 const STORE_FILE = join(STORE_DIR, "citadel-store.json");
 
 type FileEnvelope = {

@@ -7,7 +7,7 @@ let backend: StoreBackend | null = null;
 export function getStoreBackend(): StoreBackend {
   if (backend) return backend;
   if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
-    throw new Error("[store] Production requires DATABASE_URL — file backend is dev-only");
+    console.warn("[store] Running in production without DATABASE_URL — using ephemeral file backend in /tmp");
   }
   backend = process.env.DATABASE_URL ? postgresBackend : fileBackend;
   return backend;
