@@ -13,6 +13,7 @@ import {
   UserPlus,
   Activity,
   ScrollText,
+  AlertTriangle,
 } from "lucide-react";
 import { LandingCta } from "@/components/landing/landing-cta";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +111,15 @@ export function LandingPage() {
           <LandingCta size="sm" />
         </div>
       </header>
+
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 text-center backdrop-blur-md">
+        <p className="mx-auto flex max-w-4xl items-center justify-center gap-2 text-sm text-amber-200/90">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            <strong>Notice:</strong> The default Venice AI API key has run out of credits. Please use the <strong>Bring Your Own Key (BYOK)</strong> feature in Settings to set your own Venice AI API key.
+          </span>
+        </p>
+      </div>
 
       <section className="mx-auto max-w-6xl px-6 py-16 md:py-24">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
