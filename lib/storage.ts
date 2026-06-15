@@ -22,13 +22,32 @@ const REPORTS_KEY = "citadel:reports";
 const NEGOTIATIONS_KEY = "citadel:negotiations";
 const BUDGET_POOL_KEY = "citadel:budget-pool";
 const AGENT_GOALS_KEY = "citadel:agent-goals";
+const API_KEYS_KEY = "citadel:api-keys";
+
+export type ApiKeys = {
+  venice?: string;
+  bai?: string;
+};
+
+export function getApiKeys(): ApiKeys {
+  return readJson<ApiKeys>(API_KEYS_KEY, {});
+}
+
+export function saveApiKeys(keys: ApiKeys) {
+  writeJson(API_KEYS_KEY, keys);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("citadel_storage_updated"));
+  }
+}
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw, (key, val) =>
+      val && val.$type === "bigint" ? BigInt(val.value) : val
+    ) as T;
   } catch {
     return fallback;
   }
@@ -36,7 +55,12 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson<T>(key: string, value: T) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
+  localStorage.setItem(
+    key,
+    JSON.stringify(value, (key, val) =>
+      typeof val === "bigint" ? { $type: "bigint", value: val.toString() } : val
+    )
+  );
 }
 
 // ─── Permissions ────────────────────────────────────────────

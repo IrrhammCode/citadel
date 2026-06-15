@@ -84,8 +84,11 @@ const decisionSchema = z.object({
 
 // ─── Venice Client ──────────────────────────────────────────
 
+import { getServerStore } from "@/lib/server/store";
+
 function getVeniceClient(): OpenAI {
-  const apiKey = process.env.VENICE_API_KEY;
+  const storeApiKey = getServerStore().apiKeys?.venice;
+  const apiKey = storeApiKey ?? process.env.VENICE_API_KEY;
   if (!apiKey) throw new Error("VENICE_API_KEY is not configured");
   return new OpenAI({
     apiKey,
@@ -326,7 +329,7 @@ async function parseDecision(
 
 // ─── Build User Prompt ──────────────────────────────────────
 
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   return `You are an autonomous AI treasury agent. Your job is to make intelligent spending and management decisions to achieve your goal while staying within budget and meeting KPIs.
 
 CORE PRINCIPLES:
@@ -369,7 +372,7 @@ RULES:
 - Always include reasoning for each action`;
 }
 
-function buildUserPrompt(state: AgentState): string {
+export function buildUserPrompt(state: AgentState): string {
   const kpiSummary = state.kpis.map((k) => {
     const progress = k.isHigherBetter
       ? ((k.current / k.target) * 100).toFixed(1)

@@ -16,7 +16,7 @@ function LoadingVault() {
       <div className="text-center">
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[--border-emerald] border-t-[--brand-primary]" />
         <p className="mt-4 text-xs tracking-wider text-[--text-muted] uppercase">
-          Memuat vault...
+          Loading vault...
         </p>
       </div>
     </div>
@@ -65,19 +65,11 @@ export function AppShell({
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — exact 64px per spec */}
-        <header className="shrink-0 border-b border-[--border-default] bg-[--canvas]/90 backdrop-blur-md h-16">
+        {/* Top bar — sleek navigation */}
+        <header className="sticky top-0 z-30 shrink-0 border-b border-[--border-default] bg-[--canvas]/80 backdrop-blur-xl h-16">
           <div className="flex h-16 items-center justify-between gap-4 px-6">
-            <div className="min-w-0 flex-1">
+            <div className="flex items-center min-w-0 flex-1">
               <Breadcrumbs />
-              <h1 className="mt-0.5 truncate font-display text-xl font-medium text-[--text-primary]">
-                {pageTitle}
-              </h1>
-              {pageDescription && (
-                <p className="mt-0.5 hidden truncate text-sm text-[--text-secondary] sm:block">
-                  {pageDescription}
-                </p>
-              )}
             </div>
             <div className="flex shrink-0 items-center gap-3">
               {actions}
@@ -87,7 +79,27 @@ export function AppShell({
         </header>
 
         {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-[--canvas]">
+          {/* Rich Page Header */}
+          <div className="relative border-b border-[--border-default] bg-zinc-900/20">
+            {/* Background Effects */}
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+            
+            <PageContainer size={wide ? "wide" : "default"} className="relative py-10 lg:py-12">
+              <div className="max-w-3xl">
+                <h1 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  {pageTitle}
+                </h1>
+                {pageDescription && (
+                  <p className="mt-3 text-base text-zinc-400 sm:text-lg">
+                    {pageDescription}
+                  </p>
+                )}
+              </div>
+            </PageContainer>
+          </div>
+
           <PageContainer size={wide ? "wide" : "default"}>
             {children}
           </PageContainer>

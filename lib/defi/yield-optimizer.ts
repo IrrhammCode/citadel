@@ -72,7 +72,7 @@ const SUPPORTED_PROTOCOLS: DeFiProtocol[] = [
 
 // ─── In-memory state (replace with DB in production) ─────────────────────────
 
-let positions: YieldPosition[] = [
+const positions: YieldPosition[] = [
   {
     protocol: "AAVE",
     amount: 50_000,

@@ -41,7 +41,7 @@ export function BudgetPoolCard({ pool }: Props) {
               const colors = ["bg-cyan-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500"];
               return (
                 <motion.div
-                  key={alloc.systemId}
+                  key={`${alloc.systemId}-${i}`}
                   className={`h-full ${colors[i % colors.length]}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${width}%` }}
@@ -60,7 +60,7 @@ export function BudgetPoolCard({ pool }: Props) {
           const colors = ["text-cyan-400", "text-emerald-400", "text-amber-400", "text-purple-400"];
           const bgColors = ["bg-cyan-500/10", "bg-emerald-500/10", "bg-amber-500/10", "bg-purple-500/10"];
           return (
-            <div key={alloc.systemId} className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2">
+            <div key={`${alloc.systemId}-${i}`} className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2">
               <div className="flex items-center gap-2">
                 <div className={`h-2 w-2 rounded-full ${bgColors[i % bgColors.length]} ${colors[i % colors.length]}`} style={{ backgroundColor: "currentColor" }} />
                 <span className="text-sm text-zinc-300">{system?.name || alloc.systemId}</span>

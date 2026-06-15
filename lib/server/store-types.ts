@@ -24,7 +24,7 @@ export type VeniceUsageRecord = {
   tokens: number;
   latencyMs: number;
   systemId?: string;
-  authMethod: "x402" | "api_key";
+  authMethod: "x402" | "api_key" | "bai_fallback";
   timestamp: number;
   costUsd: number;
 };
@@ -46,6 +46,10 @@ export type CitadelStore = {
   budgetPool: BudgetPool | null;
   knowledge: KnowledgeItem[];
   agentLoops: Record<string, AgentLoopStatus>;
+  apiKeys?: {
+    venice?: string;
+    bai?: string;
+  };
   lastSync: number;
 };
 

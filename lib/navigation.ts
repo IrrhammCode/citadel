@@ -7,6 +7,7 @@ import {
   Play,
   Activity,
   UserPlus,
+  Settings,
 } from "lucide-react";
 
 export type NavItem = {
@@ -81,6 +82,18 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Live Demo",
         icon: Play,
         description: "Orchestrated production pipeline",
+      },
+    ],
+  },
+  {
+    id: "config",
+    label: "Configuration",
+    items: [
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        description: "API Keys and BYOK Configuration",
       },
     ],
   },

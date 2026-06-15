@@ -14,6 +14,7 @@ type PreflightData = {
       authMethod: string;
       model: string;
       latencyMs: number;
+      baiFallback?: boolean;
     };
     sessionAccount: { configured: boolean; address: string | null };
     rpc: { configured: boolean; url: string };
@@ -60,9 +61,11 @@ export function EnvPreflight({ compact }: { compact?: boolean }) {
   const items = [
     {
       label: "Venice AI",
-      ok: data.checks.venice.configured && data.checks.venice.healthy,
-      detail: data.checks.venice.configured
+      ok: (data.checks.venice.configured && data.checks.venice.healthy) || data.checks.venice.baiFallback,
+      detail: data.checks.venice.configured && data.checks.venice.healthy
         ? `${data.checks.venice.authMethod} · ${data.checks.venice.latencyMs}ms`
+        : data.checks.venice.baiFallback
+        ? "b.ai fallback active"
         : "VENICE_API_KEY or X402_WALLET_KEY",
     },
     {

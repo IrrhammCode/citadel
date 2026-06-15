@@ -18,12 +18,21 @@ const syncSchema = z.object({
   approvalRequests: z.array(z.record(z.string(), z.unknown())).optional(),
   knowledge: z.array(z.record(z.string(), z.unknown())).optional(),
   agentLoops: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+  apiKeys: z.object({
+    venice: z.string().optional(),
+    bai: z.string().optional(),
+  }).optional(),
 });
 
 export async function GET() {
   try {
     const store = await hydrateServerStore();
-    return NextResponse.json(store);
+    return new Response(
+      JSON.stringify(store, (key, val) =>
+        typeof val === "bigint" ? { $type: "bigint", value: val.toString() } : val
+      ),
+      { headers: { "Content-Type": "application/json" } }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to read store";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -9,6 +9,8 @@ import {
   getReports,
   getBudgetPool,
   getTrustScore,
+  getApiKeys,
+  saveApiKeys,
 } from "@/lib/storage";
 import { getAutonomyConfig } from "@/lib/agent/autonomy";
 import { getRecentDecisions } from "@/lib/agent/memory";
@@ -49,12 +51,15 @@ export async function syncToServer(): Promise<{ ok: boolean; error?: string }> {
       trustScores,
       decisions: getRecentDecisions(200),
       knowledge: getAllKnowledge(),
+      apiKeys: getApiKeys(),
     };
 
     const res = await fetch("/api/store", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload, (key, val) =>
+        typeof val === "bigint" ? { $type: "bigint", value: val.toString() } : val
+      ),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -132,6 +137,10 @@ export async function pullFromServer(): Promise<{ ok: boolean; error?: string }>
 
     if (store.knowledge?.length) {
       writeJson("citadel_knowledge", { items: store.knowledge, lastUpdated: Date.now() });
+    }
+
+    if (store.apiKeys) {
+      saveApiKeys(store.apiKeys);
     }
 
     window.dispatchEvent(new Event("citadel_synced"));

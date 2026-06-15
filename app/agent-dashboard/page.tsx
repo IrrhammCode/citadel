@@ -128,7 +128,7 @@ export default function AgentDashboardPage() {
       if (res.ok) {
         const data = await res.json();
         const executed = data.outcomes?.filter((o: { executed: boolean }) => o.executed).length ?? 0;
-        toast.success(`Cycle selesai — ${executed} aksi dieksekusi`);
+        toast.success(`Cycle complete — ${executed} actions executed`);
         await pullFromServer();
         fetchStatuses();
         fetchDecisions();

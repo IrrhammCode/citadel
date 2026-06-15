@@ -78,7 +78,7 @@ export function RegisterAgentWizard({ onComplete }: Props) {
       if (!sessionRes.ok) throw new Error("Session account not configured");
       const { address: sessionAddress } = (await sessionRes.json()) as { address: string };
 
-      const walletClient = createMetaMaskWalletClient();
+      const walletClient = createMetaMaskWalletClient(address as `0x${string}`);
       const currentTime = Math.floor(Date.now() / 1000);
       const expiry = currentTime + Number(expiryDays) * 86400;
       const justification = `Authorize ${system.name} to spend USDC within treasury limits.`;
@@ -86,6 +86,7 @@ export function RegisterAgentWizard({ onComplete }: Props) {
       const grantedPermissions = await walletClient.requestExecutionPermissions([
         {
           chainId: CHAIN_ID,
+          from: address as `0x${string}`,
           expiry,
           to: sessionAddress as `0x${string}`,
           permission: {

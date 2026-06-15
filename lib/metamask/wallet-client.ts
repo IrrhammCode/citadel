@@ -15,7 +15,7 @@ export type MetaMaskWalletClient = ReturnType<typeof createMetaMaskWalletClient>
  * Creates a MetaMask-backed wallet client with ERC-7715 and ERC-7710 actions.
  * Uses the currently selected MetaMask account from the provider.
  */
-export function createMetaMaskWalletClient() {
+export function createMetaMaskWalletClient(account?: `0x${string}`) {
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("MetaMask is not available");
   }
@@ -23,6 +23,7 @@ export function createMetaMaskWalletClient() {
   return createWalletClient({
     chain: CHAIN,
     transport: custom(window.ethereum),
+    account,
   })
     .extend(erc7715ProviderActions())
     .extend(erc7710WalletActions()) as Erc7715Client & Erc7710WalletClient;

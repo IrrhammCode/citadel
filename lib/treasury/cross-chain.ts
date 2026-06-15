@@ -34,7 +34,7 @@ const SUPPORTED_CHAINS: { name: string; chainId: number; rpcUrl: string; nativeC
 ];
 
 // In-memory store (replace with DB in production)
-let bridgeHistory: BridgeTransaction[] = [];
+const bridgeHistory: BridgeTransaction[] = [];
 let bridgeIdCounter = 1;
 
 /** Get balances across all supported chains */

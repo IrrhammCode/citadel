@@ -19,7 +19,9 @@ function readEnvelope(): FileEnvelope {
   }
   try {
     const raw = readFileSync(STORE_FILE, "utf-8");
-    const parsed = JSON.parse(raw) as FileEnvelope | CitadelStore;
+    const parsed = JSON.parse(raw, (key, val) =>
+      val && val.$type === "bigint" ? BigInt(val.value) : val
+    ) as FileEnvelope | CitadelStore;
     if (parsed && typeof parsed === "object" && "version" in parsed && "store" in parsed) {
       return {
         version: Number((parsed as FileEnvelope).version) || 1,
@@ -47,7 +49,11 @@ export const fileBackend: StoreBackend = {
       try {
         if (!existsSync(STORE_DIR)) mkdirSync(STORE_DIR, { recursive: true });
         const envelope: FileEnvelope = { version: nextVersion, store };
-        writeFileSync(STORE_FILE, JSON.stringify(envelope, null, 2), "utf-8");
+        writeFileSync(
+          STORE_FILE,
+          JSON.stringify(envelope, (key, val) => (typeof val === "bigint" ? { $type: "bigint", value: val.toString() } : val), 2),
+          "utf-8"
+        );
         return { version: nextVersion };
       } catch (err) {
         console.error("[file-backend] persist failed:", err);

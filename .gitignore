@@ -34,6 +34,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.next_dev.log
+lint-results.json
 
 # env files (can opt-in for committing if needed)
 .env

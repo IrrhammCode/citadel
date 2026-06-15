@@ -47,7 +47,13 @@ export const postgresBackend: StoreBackend = {
        SET data = $1::jsonb, version = version + 1, updated_at = NOW()
        WHERE id = $2 AND version = $3
        RETURNING version`,
-      [JSON.stringify(store), "main", expectedVersion],
+      [
+        JSON.stringify(store, (key, val) =>
+          typeof val === "bigint" ? { $type: "bigint", value: val.toString() } : val
+        ),
+        "main",
+        expectedVersion,
+      ]
     );
     if (res.rowCount === 0) return "conflict";
     return { version: Number(res.rows[0].version) };

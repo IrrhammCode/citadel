@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, unlinkSync, readFileSync } from "fs";
+import { existsSync, writeFileSync, unlinkSync, readFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
 const LOCK_DIR = join(process.cwd(), ".data");
@@ -6,11 +6,8 @@ const LOCK_FILE = join(LOCK_DIR, ".citadel-lock");
 const MAX_SPIN_MS = 15000;
 const STALE_MS = 10000;
 
-function sleepSync(ms: number) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    /* spin */
-  }
+function sleepAsync(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isStale(): boolean {
@@ -24,8 +21,14 @@ function isStale(): boolean {
   }
 }
 
-export function acquireStoreLock(): void {
+export async function acquireStoreLock(): Promise<void> {
   const start = Date.now();
+  if (!existsSync(LOCK_DIR)) {
+    try {
+      mkdirSync(LOCK_DIR, { recursive: true });
+    } catch {}
+  }
+  
   while (Date.now() - start < MAX_SPIN_MS) {
     if (!existsSync(LOCK_FILE) || isStale()) {
       try {
@@ -41,7 +44,7 @@ export function acquireStoreLock(): void {
         }
       }
     }
-    sleepSync(10);
+    await sleepAsync(50);
   }
   throw new Error("[store-lock] Could not acquire lock within timeout");
 }
@@ -54,10 +57,10 @@ export function releaseStoreLock(): void {
   }
 }
 
-export function withStoreLock<T>(fn: () => T): T {
-  acquireStoreLock();
+export async function withStoreLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  await acquireStoreLock();
   try {
-    return fn();
+    return await fn();
   } finally {
     releaseStoreLock();
   }

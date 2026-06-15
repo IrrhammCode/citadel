@@ -32,11 +32,11 @@ export default function SystemAgentPage() {
 
   if (!system) {
     return (
-      <AppShell title="System tidak ditemukan">
+      <AppShell title="System not found">
         <div className="py-16 text-center">
-          <p className="text-zinc-500">System ini tidak ada.</p>
+          <p className="text-zinc-500">System not found.</p>
           <Button className="mt-4" variant="outline" asChild>
-            <Link href="/systems">Kembali ke Systems</Link>
+            <Link href="/systems">Back to Systems</Link>
           </Button>
         </div>
       </AppShell>
@@ -75,7 +75,7 @@ export default function SystemAgentPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/systems">
               <ArrowLeft className="h-3.5 w-3.5" />
-              Kembali
+              Back
             </Link>
           </Button>
         </div>

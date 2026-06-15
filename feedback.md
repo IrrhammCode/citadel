@@ -1,417 +1,497 @@
-# 📝 Citadel — MetaMask Smart Accounts Kit Feedback
+# Citadel — MetaMask Smart Accounts Kit Feedback
 
-> **Track:** Best Feedback ($100 each, 5 winners)
-> **Judging Criteria:** Usefulness, Clarity, Specificity, Relevance, Actionable Value
-> **Last Updated:** 2026-06-11
+> **Track:** Best Feedback  
+> **Project:** [Citadel](https://github.com/IrrhammCode/citadel) — zero-trust corporate treasury (MetaMask Smart Accounts × Venice AI)  
+> **Kit version tested:** `@metamask/smart-accounts-kit@^1.6.0`  
+> **Chain:** Ethereum Sepolia  
+> **Last updated:** 2026-06-07  
 
 ---
 
-## 📊 Feedback Summary
+## Executive Summary
+
+While building Citadel — a multi-agent treasury where CFOs grant **ERC-7715 Advanced Permissions** and agents execute via **ERC-7710 delegation** — we successfully shipped a production-oriented flow (register → run → audit → approve → execute). However, several documentation gaps, SDK ergonomics issues, and wallet UX frictions added **days of reverse-engineering** that could have been avoided with clearer end-to-end guidance.
+
+This document lists **observed issues**, **reproduction context**, **official references**, and **Citadel workarounds** with file-level evidence.
+
+---
+
+## Environment & Reproduction
+
+| Item | Value |
+|------|--------|
+| MetaMask | Flask **13.5.0+** required for Advanced Permissions ([docs](https://docs.metamask.io/smart-accounts-kit/concepts/advanced-permissions/)) |
+| Network | Sepolia (`chainId: 11155111`) |
+| USDC (Sepolia) | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` ([kit constants](https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/)) |
+| Session account | Server-side EOA (`SESSION_ACCOUNT_PRIVATE_KEY`) as ERC-7715 `to` recipient |
+| Citadel flow | `/register-agent` → `/agent-dashboard` → `/dashboard` → `/audit-log` |
+| Live demo | `/demo` → **Run Live Pipeline** |
+
+**Official entry points we relied on:**
+
+- [Advanced Permissions concept](https://docs.metamask.io/smart-accounts-kit/concepts/advanced-permissions/)
+- [Execute on MetaMask user's behalf (full guide)](https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/)
+- [ERC-7715 Wallet Client reference — `requestExecutionPermissions`](https://docs.metamask.io/smart-accounts-kit/reference/advanced-permissions/wallet-client/)
+- [ERC-7710 Wallet Client reference — `sendTransactionWithDelegation`](https://docs.metamask.io/smart-accounts-kit/reference/erc7710/wallet-client/)
+- [EIP-7715 specification](https://eips.ethereum.org/EIPS/eip-7715)
+- [EIP-7710 specification](https://eips.ethereum.org/EIPS/eip-7710)
+- [MetaMask Advanced Permissions announcement](https://metamask.io/news/introducing-advanced-permissions)
+
+---
+
+## Feedback Summary
 
 | # | Category | Issue | Severity | Status |
 |---|----------|-------|----------|--------|
-| 1 | Documentation | ERC-7715 flow unclear | High | Open |
-| 2 | Documentation | ERC-7710 delegation examples missing | High | Open |
-| 3 | SDK | Error handling gaps | Medium | Open |
-| 4 | SDK | TypeScript types incomplete | Medium | Open |
-| 5 | DX | Local dev setup friction | Medium | Open |
-| 6 | DX | Sepolia testnet faucet integration | Low | Open |
-| 7 | Security | Permission revocation flow unclear | High | Open |
-| 8 | Composability | Multi-agent permission management | Medium | Open |
+| 1 | Documentation | Grant → redeem lifecycle not connected in one runnable example | **High** | Open |
+| 2 | Documentation | `permissionContext` / `delegationManager` extraction ambiguous at persistence boundary | **High** | Open |
+| 3 | SDK | No structured error taxonomy for grant/redeem failures | Medium | Open |
+| 4 | SDK | Return types exist but downstream persistence still requires defensive parsing | Medium | Open |
+| 5 | DX | Flask + smart-account upgrade prerequisites easy to miss | Medium | Open |
+| 6 | DX | No zero-to-working Sepolia treasury scaffold | Medium | Open |
+| 7 | Security | On-chain revocation / disable-delegation path not documented for app developers | **High** | Open |
+| 8 | Composability | Multi-agent permission inventory (`getGrantedExecutionPermissions`) under-documented | Medium | Open |
+| 9 | Documentation | Conflicting / outdated permission request shapes across examples | **High** | Open |
+| 10 | Wallet UX | Advanced Permissions prompt does not surface scope clearly to non-technical signers | Medium | Open |
 
 ---
 
-## 🔍 Detailed Feedback
+## Detailed Feedback
 
-### 1. ERC-7715 Flow Documentation
+### 1. Grant → Redeem Lifecycle Not Connected End-to-End
 
-**Category:** Documentation
-**Severity:** High
-**Component:** `@metamask/smart-accounts-kit`
+**Category:** Documentation  
+**Severity:** High  
+**Component:** Smart Accounts Kit guides + ERC-7710 reference  
 
-**Issue:**
-The `requestExecutionPermissions` flow lacks clear documentation on:
-- How to structure permission objects
-- What fields are required vs optional
-- How to handle permission expiry
-- Best practices for scoped permissions
+**Issue:**  
+Official docs cover **requesting** permissions ([ERC-7715 guide](https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/)) and **redeeming** them ([ERC-7710 reference](https://docs.metamask.io/smart-accounts-kit/reference/erc7710/wallet-client/)) separately. There is no single, copy-pasteable repo path showing:
 
-**Current State:**
+1. CFO grants `erc20-token-periodic` to a **session EOA**
+2. App persists the grant response
+3. Session EOA calls `sendTransactionWithDelegation` with extracted fields
+4. App handles revert, expiry, and user rejection
+
+**What we expected (per ERC-7710 reference):**
+
 ```typescript
-// Documentation says:
-await wallet.requestExecutionPermissions([{
-  // ???
-}]);
+// Docs state these must come from the permission response:
+const permissionContext = permissionsResponse[0].context;
+const delegationManager = permissionsResponse[0].delegationManager;
 
-// But doesn't explain:
-// 1. What goes inside the permission object
-// 2. How to scope to specific contracts/amounts
-// 3. How to set expiry
-// 4. How to handle revocation
-```
-
-**Suggestion:**
-Add a comprehensive guide with:
-1. Permission object schema with all fields explained
-2. Common patterns (daily limits, contract-scoped, time-bound)
-3. Error handling best practices
-4. Security considerations
-
-**Impact:**
-Without clear docs, developers spend hours reverse-engineering the permission format. This blocks adoption.
-
----
-
-### 2. ERC-7710 Delegation Examples
-
-**Category:** Documentation
-**Severity:** High
-**Component:** `@metamask/smart-accounts-kit/actions`
-
-**Issue:**
-The `sendTransactionWithDelegation` function works but lacks:
-- End-to-end examples showing permission grant → delegation → execution
-- How to pass `permissionContext` and `delegationManager`
-- How to handle delegation failures gracefully
-- Gas estimation for delegated transactions
-
-**Current State:**
-```typescript
-// We had to reverse-engineer this:
-const hash = await walletClient.sendTransactionWithDelegation({
-  account: sessionAccount,
-  chain: CHAIN,
+await walletClient.sendTransactionWithDelegation({
+  chain,
   to: USDC_ADDRESS,
   data,
-  permissionContext: permission.context,      // Where does this come from?
-  delegationManager: permission.delegationManager, // How to get this?
+  permissionContext,
+  delegationManager,
 });
-
-// No docs on:
-// 1. How to obtain permissionContext from grant flow
-// 2. What delegationManager is and how to configure it
-// 3. How to handle failures (reverts, insufficient gas, etc.)
 ```
 
-**Suggestion:**
-Create a "Quick Start" guide with:
-1. Full working example (grant → delegate → execute)
-2. Permission context extraction pattern
-3. Error handling patterns
-4. Gas optimization tips
+**What we had to build:**  
+A full normalization layer because persisted/stored objects did not always expose `context` at the top level after JSON round-trips and array nesting.
 
-**Impact:**
-Developers can't build working integrations without understanding the full delegation lifecycle.
+**Citadel evidence:**
+
+- Grant (correct kit shape): `components/agent/register-agent-wizard.tsx` (lines 86–103)
+- Normalize grant response: `lib/metamask/normalize-permission.ts` (lines 10–44)
+- Redeem via delegation: `lib/metamask/execute.ts` (lines 52–99)
+
+**Suggestion:**  
+Publish one **"Agent Treasury"** reference implementation: grant on MetaMask → store → redeem from session EOA → verify USDC transfer on Sepolia, with failure modes documented.
+
+**Impact:**  
+Blocks hackathon teams from shipping working delegations without reading SDK source and experimenting on-chain.
 
 ---
 
-### 3. SDK Error Handling
+### 2. `permissionContext` / `delegationManager` Extraction at Persistence Boundary
 
-**Category:** SDK
-**Severity:** Medium
-**Component:** `@metamask/smart-accounts-kit`
+**Category:** Documentation + SDK  
+**Severity:** High  
+**Component:** `GetGrantedExecutionPermissionsResult`, `sendTransactionWithDelegation`  
 
-**Issue:**
-SDK functions throw generic errors without structured error codes. This makes it hard to:
-- Distinguish between user rejection vs system error
-- Implement retry logic
-- Show meaningful error messages to users
+**Issue:**  
+The kit types define the grant response as:
 
-**Current State:**
 ```typescript
-try {
-  await wallet.requestExecutionPermissions([...]);
-} catch (error) {
-  // Is this user rejection?
-  // Is this network error?
-  // Is this invalid permission?
-  // No way to tell programmatically
-  console.error(error.message); // Generic message
+// @metamask/smart-accounts-kit — PermissionResponse
+{
+  chainId, to, permission, /* ... */
+  context: Hex;
+  delegationManager: Address;
+  dependencies: { factory, factoryData }[];
 }
 ```
 
-**Suggestion:**
-Add structured error types:
+(Source: `node_modules/@metamask/smart-accounts-kit/dist/index-DUJmm8Wz.d.ts`, lines 129–136)
+
+However, when we persist `grantedPermissions` to Postgres/localStorage and reload, we encountered multiple field shapes (`context`, `permissionContext`, nested `permission.context`, `delegationManagerAddress`). The ERC-7710 action expects `permissionContext` + `delegationManager` ([reference](https://docs.metamask.io/smart-accounts-kit/reference/erc7710/wallet-client/)).
+
+**Citadel workaround:**
+
 ```typescript
-enum SmartAccountError {
-  USER_REJECTED = 'USER_REJECTED',
-  INVALID_PERMISSION = 'INVALID_PERMISSION',
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS',
-  PERMISSION_EXPIRED = 'PERMISSION_EXPIRED',
+// lib/metamask/normalize-permission.ts
+const permissionContext =
+  p.permissionContext || p.context || p.permission?.context;
+const delegationManager =
+  p.delegationManager || p.delegationManagerAddress;
+```
+
+**Failure mode we surface to users:**
+
+```
+Invalid delegation permission — missing permissionContext or delegationManager
+```
+
+(`lib/metamask/execute.ts`, lines 58–64)
+
+**Suggestion:**
+
+- Export a first-party helper: `extractDelegationFields(grant: PermissionResponse)`
+- Document serialization rules (what is safe to `JSON.stringify` and reload)
+- Document `dependencies[]` handling when session/smart accounts are not yet deployed ([EIP-7715 `dependencies`](https://eips.ethereum.org/EIPS/eip-7715))
+
+**Impact:**  
+Silent failures after app restart — permissions appear granted in UI but execution fails.
+
+---
+
+### 3. SDK Error Handling Gaps
+
+**Category:** SDK  
+**Severity:** Medium  
+**Component:** `requestExecutionPermissions`, `sendTransactionWithDelegation`  
+
+**Issue:**  
+Errors from grant/redeem flows arrive as generic `Error` messages or JSON-RPC codes (`4001`, `-32002`, `-32603`). There is no typed discriminator for:
+
+- User rejected permission
+- Permission expired
+- Invalid / revoked delegation
+- Insufficient USDC balance
+- Wrong session account
+- Caveat enforcer revert
+
+**Citadel workaround:**  
+We implemented application-level error handling:
+
+- `ExecutionError` with `code` field — `lib/metamask/execute.ts` (lines 28–45)
+- `ResilienceCircuitBreaker` + retry — `lib/metamask/execute.ts` (lines 47–48, 88–102)
+- MetaMask RPC code mapping — `lib/resilience/error-handler.ts` (lines 221–237)
+
+**Suggestion:**  
+Export `SmartAccountKitError` enum + `parseSmartAccountError(unknown)` consistent with [viem's `BaseError` pattern](https://viem.sh/docs/glossary/errors).
+
+**Impact:**  
+Hard to build CFO-friendly UX and automated retry without fragile string matching.
+
+---
+
+### 4. TypeScript Types vs Runtime Persistence
+
+**Category:** SDK  
+**Severity:** Medium  
+**Component:** `@metamask/smart-accounts-kit/actions`  
+
+**Issue:**  
+The kit exports `GetGrantedExecutionPermissionsResult` and we use it in `types/permission.ts`. In practice, persistence and normalization still require `unknown` + manual casts because:
+
+- Stored permissions are nested inside app-specific `StoredPermission` objects
+- Array vs single-object grant responses differ by code path
+- Legacy helper code used `walletClient: any` (`lib/metamask/permissions.ts`, line 38)
+
+**Citadel evidence:**
+
+- Typed import: `types/permission.ts` (line 1–12)
+- Defensive cast: `lib/metamask/normalize-permission.ts` (line 13)
+- `any` wallet client: `lib/metamask/permissions.ts` (line 37–38)
+
+**Suggestion:**  
+Ship `StoredPermission` / `SerializablePermissionResponse` types and a `serializePermissionResponse()` / `deserializePermissionResponse()` pair in the kit.
+
+**Impact:**  
+Type safety ends at the MetaMask popup; everything after is `as` casts and hope.
+
+---
+
+### 5. Local Development Prerequisites (Flask + Smart Account Upgrade)
+
+**Category:** DX  
+**Severity:** Medium  
+**Component:** MetaMask Flask, Smart Account upgrade  
+
+**Issue:**  
+Advanced Permissions require MetaMask Flask **13.5.0+** ([docs](https://docs.metamask.io/smart-accounts-kit/concepts/advanced-permissions/)). Flask **13.9.0+** can auto-upgrade users to a smart account during the permission flow; earlier versions require explicit upgrade first ([guide note](https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/)).
+
+Citadel onboarding requires:
+
+1. Install Flask (not production MetaMask extension)
+2. Add Sepolia + fund ETH
+3. Configure `SESSION_ACCOUNT_PRIVATE_KEY`
+4. Fund session account with Sepolia USDC for delegated transfers
+5. Extend viem client with `erc7715ProviderActions` + `erc7710WalletActions`
+
+**Citadel evidence:**
+
+- Wallet client setup: `lib/metamask/wallet-client.ts` (lines 18–29)
+- Env template: `.env.local.example`
+- Optional EIP-7702 upgrade UI: `components/agent/upgrade-7702.tsx`
+
+**Suggestion:**  
+`npx create-smart-account-app` with Flask detection, Sepolia faucet links, session key generator, and a health-check page.
+
+**Impact:**  
+First successful permission grant took **multiple hours** across Flask versions and upgrade sequencing.
+
+---
+
+### 6. Sepolia Faucet & Test Asset Friction
+
+**Category:** DX  
+**Severity:** Low  
+**Component:** Testnet tooling  
+
+**Issue:**  
+Delegated USDC transfers require:
+
+- Sepolia ETH (gas) on session EOA **or** relayer path
+- Sepolia USDC in the **delegator's** MetaMask account
+
+No kit-level guidance links Sepolia USDC faucet + minimum balances for a working demo.
+
+**Suggestion:**  
+Document minimum balances and link Sepolia USDC faucet in the Advanced Permissions quickstart.
+
+---
+
+### 7. Permission Revocation & Lifecycle (Security)
+
+**Category:** Security / Documentation  
+**Severity:** High  
+**Component:** ERC-7710 `disableDelegation`, ERC-7715 expiry  
+
+**Issue:**  
+It is unclear from app-developer docs how to:
+
+- Revoke a single agent permission without revoking others
+- Disable an active delegation on-chain
+- Determine whether a stored permission is still redeemable before execution
+- Handle in-flight delegations after revocation
+
+The kit exposes delegation manager actions in typings (`simulateDisableDelegation`, `executeDisableDelegation` in SDK dist), but Citadel could not find a clear **application-level** revocation recipe in the public guides.
+
+**Citadel workaround (off-chain only):**
+
+```typescript
+// lib/metamask/permissions.ts — marks status locally; does NOT revoke on-chain
+export function revokePermission(permission: GrantedPermission): GrantedPermission {
+  return { ...permission, status: "revoked" };
 }
 ```
 
-**Impact:**
-Better error handling leads to better UX and easier debugging.
+We also added server-side lifecycle actions (`/api/agent/lifecycle`) for stop / emergency stop / revoke in app store — not on-chain revocation.
 
----
+**Suggestion:**  
+Document: **Grant → List (`getGrantedExecutionPermissions`) → Redeem → Expire → Disable delegation on-chain**, with code for `wallet_getGrantedExecutionPermissions` ([EIP-7715](https://eips.ethereum.org/EIPS/eip-7715)).
 
-### 4. TypeScript Types
-
-**Category:** SDK
-**Severity:** Medium
-**Component:** `@metamask/smart-accounts-kit`
-
-**Issue:**
-Some TypeScript types are incomplete or generic:
-- Permission objects typed as `Record<string, unknown>`
-- Response types don't include all fields
-- Missing type exports for common patterns
-
-**Current State:**
-```typescript
-// Permission object is loosely typed
-type Permission = Record<string, unknown>;
-
-// We need:
-type Permission = {
-  id: string;
-  target: Address;
-  amount: bigint;
-  expiry: number;
-  scope: 'daily' | 'per-transaction' | 'lifetime';
-  // ... etc
-};
-```
-
-**Suggestion:**
-Export comprehensive TypeScript types for all permission objects and responses.
-
-**Impact:**
-Better types = better DX, fewer bugs, faster development.
-
----
-
-### 5. Local Development Setup
-
-**Category:** DX
-**Severity:** Medium
-**Component:** Development Environment
-
-**Issue:**
-Setting up local development with MetaMask Smart Accounts Kit is friction-heavy:
-- Need MetaMask Flask for ERC-7715 support
-- Need to configure Sepolia testnet manually
-- No clear "zero-to-working" tutorial
-- Hardhat/viem integration not documented
-
-**Current State:**
-```bash
-# What we had to figure out:
-1. Install MetaMask Flask (not regular MetaMask)
-2. Add Sepolia network manually
-3. Get Sepolia ETH from faucet
-4. Configure session account private key
-5. Set up viem + smart accounts kit
-6. ... and more
-```
-
-**Suggestion:**
-Create a CLI scaffold or starter template:
-```bash
-npx create-smart-account-app my-app
-# Automatically sets up:
-# - MetaMask Flask integration
-# - Sepolia testnet config
-# - Session account generation
-# - Sample permission flow
-```
-
-**Impact:**
-Reduces onboarding time from hours to minutes.
-
----
-
-### 6. Sepolia Faucet Integration
-
-**Category:** DX
-**Severity:** Low
-**Component:** Development Environment
-
-**Issue:**
-No built-in faucet integration for Sepolia testnet ETH. Developers need to:
-- Find external faucets
-- Wait for manual approval
-- Handle rate limits
-
-**Suggestion:**
-Integrate with Sepolia faucet or provide a dev faucet endpoint.
-
-**Impact:**
-Minor but improves developer experience.
-
----
-
-### 7. Permission Revocation Flow
-
-**Category:** Security
-**Severity:** High
-**Component:** `@metamask/smart-accounts-kit`
-
-**Issue:**
-Documentation doesn't clearly explain:
-- How to revoke granted permissions
-- What happens to in-flight delegations after revocation
-- How to check if a permission is still valid
-- Emergency revocation patterns
-
-**Current State:**
-```typescript
-// How to revoke?
-await wallet.revokePermission(permissionId); // ???
-
-// What happens to pending delegations?
-// How to check validity?
-// No docs on this
-```
-
-**Suggestion:**
-Document the full permission lifecycle:
-1. Grant → Use → Expire → Revoke
-2. Revocation patterns (immediate, graceful)
-3. Status checking APIs
-4. Emergency revocation
-
-**Impact:**
-Critical for security. Without clear revocation docs, developers may leave permissions open.
+**Impact:**  
+Security-critical gap for enterprise treasury — off-chain `"revoked"` is not sufficient for production.
 
 ---
 
 ### 8. Multi-Agent Permission Management
 
-**Category:** Composability
-**Severity:** Medium
-**Component:** `@metamask/smart-accounts-kit`
+**Category:** Composability  
+**Severity:** Medium  
+**Component:** `getGrantedExecutionPermissions`, app-level namespacing  
 
-**Issue:**
-No clear pattern for managing permissions across multiple autonomous agents:
-- How to grant different permissions to different agents
-- How to track which agent used which permission
-- How to set per-agent spending limits
-- How to audit agent activity
+**Issue:**  
+Citadel runs **multiple autonomous agents** (marketing, devops, payroll, custom agents). Each needs:
 
-**Current State:**
+- Distinct spending limits
+- Mapping `systemId` → granted permission blob
+- Audit trail per agent
+
+The kit provides `getGrantedExecutionPermissions()` in `erc7715ProviderActions` ([Wallet Client reference](https://docs.metamask.io/smart-accounts-kit/reference/advanced-permissions/wallet-client/)), but there is no pattern for **namespaced permissions per agent** or correlating redeems to an app-level agent ID.
+
+**Citadel evidence:**
+
+- Per-agent mapping in `StoredPermission.systemId` — `types/permission.ts`
+- Multi-agent store — `lib/server/store-types.ts` (`permissions[]`, `customSystems[]`)
+- Lifecycle panel — `components/agent/agent-lifecycle-panel.tsx`
+
+**Suggestion:**  
+"Multi-agent treasury" guide: permission naming metadata, per-agent session accounts vs shared session account tradeoffs, bulk revoke.
+
+---
+
+### 9. Conflicting Permission Request Shapes in the Wild
+
+**Category:** Documentation  
+**Severity:** High  
+**Component:** `requestExecutionPermissions` parameter schema  
+
+**Issue:**  
+The **official** request shape uses `chainId`, `expiry`, `to`, and `permission: { type: 'erc20-token-periodic', data: {...} }` ([reference](https://docs.metamask.io/smart-accounts-kit/reference/advanced-permissions/wallet-client/)).
+
+Citadel initially implemented an **incorrect** alternative schema in `lib/metamask/permissions.ts`:
+
 ```typescript
-// We have 26 agents, each needs different permissions:
-// Marketing: 10 USDC/day
-// DevOps: 5 USDC/day
-// Payroll: 20 USDC/day
-
-// How to manage this?
-// No pattern for multi-agent permission scoping
+// ❌ Does NOT match official kit API — our early mistake
+{
+  requiredMethods: ["eth_sendTransaction"],
+  expiry: ...,
+  permissions: [{ type: "contract-call", data: { ... } }],
+  limits: { maxAmountPerTransaction, maxAmountPerDay },
+  metadata: { systemId, systemName },
+}
 ```
 
-**Suggestion:**
-Add a "Multi-Agent Treasury" guide:
-1. Permission namespacing per agent
-2. Per-agent spending limits
-3. Activity audit trail
-4. Bulk permission management
+(`lib/metamask/permissions.ts`, lines 42–73)
 
-**Impact:**
-Essential for enterprise use cases with multiple autonomous systems.
+The **working** implementation matches official docs in `register-agent-wizard.tsx`:
 
----
+```typescript
+// ✅ Matches official kit API
+await walletClient.requestExecutionPermissions([{
+  chainId: CHAIN_ID,
+  expiry,
+  to: sessionAddress,
+  permission: {
+    type: "erc20-token-periodic",
+    data: { tokenAddress, periodAmount, periodDuration, justification },
+    isAdjustmentAllowed: true,
+  },
+}]);
+```
 
-## 🎯 Positive Feedback
+(`components/agent/register-agent-wizard.tsx`, lines 86–103)
 
-### What Works Well
+**Root cause:**  
+Without a single canonical schema in docs + starter templates, developers infer incorrect shapes from partial examples, blog posts, or pre-release snippets.
 
-1. **ERC-7715 Concept** — Granular permissions for autonomous agents is powerful
-2. **MetaMask Integration** — Familiar wallet experience for users
-3. **Sepolia Support** — Testnet works well for development
-4. **viem Compatibility** — Works with existing viem/wagmi stack
+**Suggestion:**  
+- Mark deprecated shapes clearly  
+- Add JSON Schema validation errors client-side in the kit when `requestExecutionPermissions` params are malformed  
 
-### What's Impressive
-
-1. **Vision** — The idea of wallet-native permissions for AI agents is forward-thinking
-2. **Security Model** — Scoped permissions with expiry is well-designed
-3. **Composability** — ERC-7710 delegation enables complex permission patterns
-
----
-
-## 📈 Improvement Roadmap
-
-### Short-term (Documentation)
-- [ ] Complete ERC-7715 permission object reference
-- [ ] Add end-to-end delegation example
-- [ ] Document permission revocation flow
+**Impact:**  
+We lost time debugging permissions that never matched the Flask RPC handler.
 
 ---
 
-## 🛠️ Citadel Implementation Pain Points (MetaMask Smart Accounts)
+### 10. Advanced Permissions Wallet UX for CFO Signers
 
-**Project Context:** Citadel is a zero-trust autonomous treasury platform where multiple AI agents (marketing, finance, compliance, security, etc.) operate under ERC-7715 Advanced Permissions. We grant scoped permissions to session accounts, use 1Shot relayer for gas abstraction (x402 + stablecoins), and rely on Venice AI for all decision gates.
+**Category:** Wallet UX  
+**Severity:** Medium  
+**Component:** MetaMask Flask permission confirmation UI  
 
-### Additional Issues Encountered
+**Issue:**  
+MetaMask's Advanced Permissions UI does not always present daily USDC limits, expiry, and recipient scope in a way non-technical CFOs can audit before signing ([product intent](https://metamask.io/news/introducing-advanced-permissions) vs on-screen clarity).
 
-**1. Session Account + Permission Context Extraction (Critical DX Blocker)**
-- After `requestExecutionPermissions`, extracting the exact `permissionContext` and `delegationManager` for `sendTransactionWithDelegation` required deep reverse-engineering.
-- No clear mapping between the returned permission object and what the delegation functions expect.
-- In a multi-agent setup, we had to manually persist and map permissions per systemId.
+**Citadel workaround:**  
+We built a **pre-flight wizard** that explains limits *before* the MetaMask popup:
 
-**2. 7702 Account Upgrade + 7715 Permission Grant Sequencing**
-- The order of operations (first 7702 upgrade via 1Shot, then grant permissions) is fragile.
-- No clear guidance on whether to upgrade first or grant on EOA then upgrade.
-- Frequent "account not upgraded" or "invalid context" errors during testing with the register-agent wizard.
+- `components/agent/register-agent-wizard.tsx` — 5-step Identity → Mandate → Policy → Authorize → Activate
+- Human-readable justification string passed to `permission.data.justification`
 
-**3. MetaMask Flask + Advanced Permissions UX in Production-like Flows**
-- Users (even on Flask) often see confusing permission request UI.
-- The "Advanced Permissions" prompt does not clearly show the scoped limits (daily USDC, expiry, recipient restrictions) in a human-friendly way.
-- This hurts the "Best Agent" and "Best x402 + 7710" experience because end-users (CFOs) get a poor mental model of what they are granting.
+**Suggestion:**  
+Permission confirmation screen should mirror wizard fields: **daily limit, token, period, expiry date, session account address, revocability**.
 
-**4. Gas Sponsorship with 1Shot Relayer + Delegated Transactions**
-- Combining ERC-7710 delegated calls with 1Shot permissionless relayer (pay gas in USDC) required custom viem middleware.
-- Error messages when the relayer rejects (e.g., insufficient sponsored gas quota) are opaque.
-- Hard to surface "gas will be paid by 1Shot in USDC" to the user during the grant flow.
-
-**5. Permission Persistence & Revocation in Multi-Agent Systems**
-- Once granted, there is no first-class way to list/inspect active permissions per session account from the client side easily.
-- Revoking a specific agent's permission without affecting others is manual and error-prone.
-- In our Council (A2A) system, we needed cross-agent visibility into permission health — this is missing.
-
-**6. TypeScript / Type Safety for Permission Objects**
-- Heavy use of `as any` and manual type casting throughout the register wizard and permission grant flow.
-- The returned objects from the kit do not match the types needed for downstream delegation and 1Shot calls.
-
-**Recommendations for the MetaMask team (in addition to previous feedback):**
-- Provide a typed `PermissionContext` helper + `createDelegationManager` utility.
-- Official example repo showing "Agent Treasury" pattern: EOA → 7702 upgrade via relayer → 7715 grant → delegated execution via relayer (with x402).
-- Better permission request UI that visually summarizes scope (amount limits, expiry, allowed contracts) for non-technical signers (CFOs).
-- First-class support for "named permissions" so apps like Citadel can do `revokePermissionByName("marketing-agent-daily")`.
-
-These frictions significantly slowed development of a production-grade multi-agent system. Fixing the DX here would unlock many more "Best Agent" and "Best x402 + ERC-7710" submissions.
+**Impact:**  
+Enterprise adoption requires finance stakeholders to trust what they sign.
 
 ---
 
-## ✅ Final Notes
+## Citadel Architecture (for context)
 
-Citadel successfully demonstrates a real-world, fail-closed, Venice-AI-gated autonomous treasury using MetaMask Advanced Permissions + 1Shot relayer. The conceptual model is excellent; the current implementation experience still has rough edges that the above feedback aims to help smooth. 
+```
+CFO MetaMask (delegator)
+    │  requestExecutionPermissions (ERC-7715)
+    ▼
+Session EOA (SERVER)  ──►  sendTransactionWithDelegation (ERC-7710)
+    │                              │
+    ▼                              ▼
+Citadel Store (Postgres)     USDC transfer on Sepolia
+    │
+    ▼
+Venice AI audit gate (fail-closed) → CFO EIP-712 approval → execute
+```
 
-We are excited about the direction and hope this detailed report helps the team ship even better developer and end-user experiences.
-- [ ] Add error handling guide
+**Key files:**
+
+| Concern | File |
+|---------|------|
+| MetaMask wallet client extensions | `lib/metamask/wallet-client.ts` |
+| Permission grant (production path) | `components/agent/register-agent-wizard.tsx` |
+| Permission normalization | `lib/metamask/normalize-permission.ts` |
+| Delegated execution | `lib/metamask/execute.ts` |
+| Session account | `lib/metamask/session-account.ts` |
+| EIP-7702 upgrade (1Shot) | `components/agent/upgrade-7702.tsx`, `app/api/upgrade-7702/route.ts` |
+| Agent lifecycle (app-level) | `app/api/agent/lifecycle/route.ts` |
+
+---
+
+## What Works Well (Positive Feedback)
+
+1. **ERC-7715 mental model** — Scoped, expiring, human-readable permissions are the right primitive for AI agent treasuries ([concept doc](https://docs.metamask.io/smart-accounts-kit/concepts/advanced-permissions/)).
+2. **viem integration** — `.extend(erc7715ProviderActions())` / `.extend(erc7710WalletActions())` fits our stack cleanly.
+3. **Sepolia support** — USDC address documented and works with kit examples.
+4. **ERC-7710 delegation** — Enables session-account execution without custody transfer ([EIP-7710](https://eips.ethereum.org/EIPS/eip-7710)).
+5. **Vision alignment** — [Advanced Permissions announcement](https://metamask.io/news/introducing-advanced-permissions) matches Citadel's CFO + agent use case directly.
+
+---
+
+## Recommended Roadmap (Actionable)
+
+### Short-term (documentation)
+
+- [ ] Single **Agent Treasury** example: grant → persist → redeem → verify balance
+- [ ] Document `context` → `permissionContext` mapping explicitly
+- [ ] Document on-chain revocation via delegation manager
+- [ ] Flask version matrix (13.5 vs 13.9 smart-account auto-upgrade)
+- [ ] Sepolia USDC + ETH minimum balances
 
 ### Medium-term (SDK)
-- [ ] Export comprehensive TypeScript types
-- [ ] Add structured error codes
-- [ ] Create CLI scaffold
-- [ ] Add multi-agent permission patterns
 
-### Long-term (Ecosystem)
-- [ ] Create permission template library
-- [ ] Add permission analytics dashboard
-- [ ] Integrate with popular frameworks (Next.js, Hardhat)
-- [ ] Create permission testing utilities
+- [ ] `extractDelegationFields()` helper
+- [ ] Structured error types for grant/redeem
+- [ ] Serializable permission types for app storage
+- [ ] `create-smart-account-app` CLI scaffold
 
----
+### Long-term (ecosystem)
 
-## 📞 Contact
-
-**Project:** Citadel — Zero-Trust Corporate Treasury
-**Team:** Irham (@aydencryptoo)
-**Repo:** https://github.com/IrrhammCode/citadel
+- [ ] Multi-agent treasury pattern guide
+- [ ] Permission health dashboard (`getGrantedExecutionPermissions` wrapper)
+- [ ] CFO-facing permission summary component (embeddable)
 
 ---
 
-*This feedback is based on our experience building Citadel, a zero-trust corporate treasury platform that uses ERC-7715 Advanced Permissions to grant granular spending authority to autonomous AI agents.*
+## Reproduction Checklist (for MetaMask team)
+
+To reproduce Citadel's top issues in ~30 minutes:
+
+1. Clone https://github.com/IrrhammCode/citadel
+2. `cp .env.local.example .env.local` — set `VENICE_API_KEY`, `SESSION_ACCOUNT_PRIVATE_KEY`
+3. `npm run infra:up && npm run db:migrate && npm run dev`
+4. Install **MetaMask Flask 13.5+** on Sepolia
+5. Open `/register-agent` — grant permission to session address
+6. Inspect stored `grantedPermissions` in `GET /api/store`
+7. Run `PATCH /api/agent/loop` from `/agent-dashboard`
+8. Observe whether `executeDelegatedTransfer` succeeds or returns normalization error
+9. Compare `lib/metamask/permissions.ts` (legacy shape) vs `register-agent-wizard.tsx` (correct shape)
+
+---
+
+## Contact
+
+| Field | Value |
+|-------|--------|
+| **Project** | Citadel — Zero-Trust Corporate Treasury |
+| **Team** | Irham ([@aydencryptoo](https://github.com/IrrhammCode)) |
+| **Repository** | https://github.com/IrrhammCode/citadel |
+| **Feedback file** | `feedback.md` (this document) |
+
+---
+
+*This feedback reflects hands-on implementation experience building a multi-agent, Venice-AI-gated treasury on Sepolia using MetaMask Advanced Permissions (ERC-7715) and delegation redemption (ERC-7710). We are enthusiastic about the direction and hope these specifics help improve developer and CFO experiences.*

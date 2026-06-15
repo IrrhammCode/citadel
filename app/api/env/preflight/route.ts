@@ -3,6 +3,7 @@ import { getProductionReadiness, getEnv } from "@/lib/env";
 import { VeniceService } from "@/lib/venice/service";
 import { getStoreBackendName } from "@/lib/server/backends";
 import { isRedisConfigured } from "@/lib/server/redis";
+import { isBaiFallbackConfigured } from "@/lib/fallback/bai";
 
 export async function GET() {
   try {
@@ -52,8 +53,10 @@ export async function GET() {
       }
     }
 
+    const fallbackActive = isBaiFallbackConfigured();
+
     return NextResponse.json({
-      ready: readiness.ready && veniceHealth.ok && (!readiness.database || postgresOk),
+      ready: readiness.ready && (veniceHealth.ok || fallbackActive) && (!readiness.database || postgresOk),
       checks: {
         venice: {
           configured: readiness.venice,
@@ -61,6 +64,7 @@ export async function GET() {
           authMethod: veniceHealth.authMethod,
           model: server.VENICE_MODEL,
           latencyMs: veniceHealth.latencyMs,
+          baiFallback: !!process.env.FALLBACK_BAI_API_KEY,
         },
         sessionAccount: {
           configured: readiness.sessionAccount,

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { metaMask } from "wagmi/connectors";
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
 
@@ -34,7 +34,7 @@ export function ConnectButton() {
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
       <Button
         variant="emerald"
-        onClick={() => connect({ connector: injected() })}
+        onClick={() => connect({ connector: metaMask() })}
         disabled={isPending}
       >
         <motion.div
@@ -43,7 +43,7 @@ export function ConnectButton() {
         >
           <Wallet className="h-4 w-4" />
         </motion.div>
-        {isPending ? "Connecting..." : "Connect MetaMask"}
+        {isPending ? "Connecting..." : "Connect Flask"}
       </Button>
     </motion.div>
   );

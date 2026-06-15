@@ -48,8 +48,8 @@ export function useFlowProgress() {
         label: "Run Agent",
         description: "Start cycle → think → audit → execute",
         href: "/agent-dashboard",
-        done: hasAudit && (hasActivity || decisions > 0),
-        active: hasPermission && !hasAudit,
+        done: decisions > 0,
+        active: hasPermission && decisions === 0,
       },
       {
         id: "deliver",
@@ -57,7 +57,7 @@ export function useFlowProgress() {
         description: "Activity feed, audit log, reports",
         href: "/dashboard",
         done: hasActivity,
-        active: hasAudit && !hasActivity,
+        active: decisions > 0 && !hasActivity,
       },
       {
         id: "venice",

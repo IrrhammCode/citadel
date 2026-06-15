@@ -6,6 +6,7 @@ import {
   buildComplianceUserPrompt,
   COMPLIANCE_SYSTEM_PROMPT,
 } from "@/lib/venice/prompts";
+import { getServerStore } from "@/lib/server/store";
 
 // ─── Venice AI Response Types ───────────────────────────────
 
@@ -164,7 +165,8 @@ export class VeniceClient {
     cacheTtlMs?: number;
     retryOptions?: Partial<RetryOptions>;
   }) {
-    this.apiKey = options?.apiKey ?? process.env.VENICE_API_KEY ?? "";
+    const storeApiKey = getServerStore().apiKeys?.venice;
+    this.apiKey = options?.apiKey ?? storeApiKey ?? process.env.VENICE_API_KEY ?? "";
     this.baseURL = options?.baseURL ?? "https://api.venice.ai/api/v1";
 
     if (!this.apiKey) {
@@ -425,7 +427,8 @@ export function getVeniceClient(): VeniceClient {
  * Check if Venice is configured (API key or x402 wallet)
  */
 export function isVeniceConfigured(): boolean {
-  return !!(process.env.VENICE_API_KEY || process.env.X402_WALLET_KEY);
+  const storeApiKey = getServerStore().apiKeys?.venice;
+  return !!(storeApiKey || process.env.VENICE_API_KEY || process.env.X402_WALLET_KEY);
 }
 
 /**
@@ -980,7 +983,8 @@ export async function generateTreasuryVisual(
   prompt: string,
   options?: { width?: number; height?: number },
 ): Promise<{ url: string; prompt: string }> {
-  const apiKey = process.env.VENICE_API_KEY;
+  const storeApiKey = getServerStore().apiKeys?.venice;
+  const apiKey = storeApiKey ?? process.env.VENICE_API_KEY;
   if (!apiKey) throw new Error("VENICE_API_KEY required for image generation");
 
   const model = "flux-dev";

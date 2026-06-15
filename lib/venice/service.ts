@@ -20,8 +20,9 @@ import {
   veniceChatText,
   ensureVeniceBudget,
 } from "@/lib/venice/inference";
-import { thinkWithMetrics, type AgentState, type AgentDecision } from "@/lib/agent/brain";
+import { thinkWithMetrics, buildSystemPrompt, buildUserPrompt, type AgentState, type AgentDecision } from "@/lib/agent/brain";
 import { e2eMockAgentThink, isE2eMockVeniceEnabled } from "@/lib/venice/e2e-mock";
+import { fallbackAuditEnhanced, fallbackAgentThink, isBaiFallbackConfigured } from "@/lib/fallback/bai";
 import type { AuditRequestBody, AuditVerdict } from "@/types/audit";
 import { appendVeniceUsage } from "@/lib/server/store";
 
@@ -33,6 +34,7 @@ function trackUsage(
   tokens: number,
   latencyMs: number,
   systemId?: string,
+  authMethodOverride?: "bai_fallback",
 ) {
   appendVeniceUsage({
     operation,
@@ -40,7 +42,7 @@ function trackUsage(
     tokens,
     latencyMs,
     systemId,
-    authMethod: isX402Available() ? "x402" : "api_key",
+    authMethod: authMethodOverride ?? (isX402Available() ? "x402" : "api_key"),
     costUsd: tokens > 0 ? (tokens / 1000) * TOKEN_COST_PER_1K : 0,
   });
 }
@@ -104,6 +106,17 @@ export class VeniceService {
       trackUsage("audit", model, tokens, Date.now() - start, body.systemId);
       return verdict;
     } catch (error) {
+      if (isBaiFallbackConfigured()) {
+        try {
+          console.warn("[VeniceService] Primary failed, routing to B.AI fallback...");
+          const { verdict, tokens } = await fallbackAuditEnhanced(body);
+          trackUsage("audit", process.env.FALLBACK_BAI_MODEL ?? "llama-3.1-70b", tokens, Date.now() - start, body.systemId, "bai_fallback");
+          return verdict;
+        } catch (fallbackErr) {
+          console.error("[VeniceService] Fallback also failed:", fallbackErr);
+        }
+      }
+
       const msg = error instanceof VeniceClientError
         ? `${error.code}: ${error.message}`
         : error instanceof Error ? error.message : "Unknown Venice error";
@@ -140,9 +153,29 @@ export class VeniceService {
 
     const start = Date.now();
     const model = process.env.VENICE_MODEL ?? "llama-3.3-70b";
-    const { decision, tokens } = await thinkWithMetrics(enriched);
-    trackUsage("think", model, tokens, Date.now() - start, state.systemId);
-    return decision;
+
+    try {
+      const { decision, tokens } = await thinkWithMetrics(enriched);
+      trackUsage("think", model, tokens, Date.now() - start, state.systemId);
+      return decision;
+    } catch (error) {
+      if (isBaiFallbackConfigured()) {
+        console.warn("[VeniceService] Primary agentThink failed, routing to B.AI fallback...");
+        // Re-construct the prompt format that thinkWithMetrics uses
+        const messages: any = [
+          { role: "system", content: buildSystemPrompt() },
+          { role: "user", content: buildUserPrompt(enriched) },
+        ];
+        const { data, tokens } = await fallbackAgentThink(messages, customPrompt);
+        trackUsage("think", process.env.FALLBACK_BAI_MODEL ?? "llama-3.1-70b", tokens, Date.now() - start, state.systemId, "bai_fallback");
+        try {
+          return JSON.parse(data.match(/\{[\s\S]*\}/)?.[0] ?? data) as AgentDecision;
+        } catch {
+          throw new Error("Failed to parse B.AI fallback agent decision");
+        }
+      }
+      throw error;
+    }
   }
 
   static async generateAgentReport(

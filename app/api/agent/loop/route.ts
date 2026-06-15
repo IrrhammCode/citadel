@@ -26,7 +26,8 @@ const stopSchema = z.object({
 
 const agentIntervals: Record<string, ReturnType<typeof setInterval>> = {};
 
-function useInProcessScheduler(): boolean {
+function checkInProcessScheduler(): boolean {
+  if (process.env.FORCE_IN_PROCESS === "true") return true;
   return !isRedisConfigured();
 }
 
@@ -38,8 +39,10 @@ function startInProcessInterval(systemId: string, intervalMinutes: number) {
   );
 }
 
-async function runCycle(systemId: string) {
-  await hydrateServerStore();
+async function runCycle(systemId: string, skipHydrate = false) {
+  if (!skipHydrate) {
+    await hydrateServerStore();
+  }
   try {
     const result = await runServerCycle(systemId);
     const statuses = getAllAgentLoopStatuses();
@@ -96,12 +99,12 @@ export async function POST(request: Request) {
     saveAgentLoopStatus(status);
 
     try {
-      await runCycle(systemId);
+      await runCycle(systemId, true);
     } catch (err) {
       console.warn(`[agent-loop] Initial cycle failed for ${systemId}:`, err);
     }
 
-    if (useInProcessScheduler()) {
+    if (checkInProcessScheduler()) {
       startInProcessInterval(systemId, intervalMinutes);
     } else {
       await scheduleAgentRun(systemId, intervalMinutes);
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       agent: getAllAgentLoopStatuses()[systemId],
-      scheduler: useInProcessScheduler() ? "in-process" : "redis",
+      scheduler: checkInProcessScheduler() ? "in-process" : "redis",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -180,7 +183,7 @@ export async function PATCH(request: Request) {
       });
     }
 
-    const result = await runCycle(systemId);
+    const result = await runCycle(systemId, true);
 
     return NextResponse.json({
       success: true,
