@@ -16,8 +16,8 @@ export function Sidebar() {
         href="/"
         className="flex items-center gap-3 border-b border-[--border-default] px-5 py-4 transition-colors hover:bg-white/[0.02]"
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[--border-emerald] bg-[--brand-glow]">
-          <Shield className="h-4 w-4 text-[--brand-primary]" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[--border-emerald] bg-[--brand-glow] p-1.5">
+          <img src="/logo.svg" alt="Citadel" className="h-full w-full object-contain" />
         </div>
         <div className="min-w-0">
           <p className="truncate font-display text-base font-semibold text-[--text-primary]">

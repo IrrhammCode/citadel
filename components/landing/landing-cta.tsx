@@ -34,7 +34,9 @@ export function LandingCta({ size = "default", variant = "primary" }: LandingCta
 
   const content = isConnected ? (
     <>
-      {getPermissions().length > 0 ? "Buka Dashboard" : "Register Agent"}
+      <span className="relative z-10 font-medium">
+        {getPermissions().length > 0 ? "Open Dashboard" : "Register Agent"}
+      </span>
       <ArrowRight className="h-4 w-4" />
     </>
   ) : (

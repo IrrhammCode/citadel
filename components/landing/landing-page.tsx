@@ -95,8 +95,8 @@ export function LandingPage() {
       <header className="sticky top-0 z-30 border-b border-[--border-default] bg-[--canvas]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[--border-emerald] bg-[--brand-glow]">
-              <Shield className="h-4 w-4 text-[--brand-primary]" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[--border-emerald] bg-[--brand-glow] p-1">
+              <img src="/logo.svg" alt="Citadel" className="h-full w-full object-contain" />
             </div>
             <span className="font-display text-lg font-semibold text-[--text-primary]">Citadel</span>
           </Link>
@@ -174,7 +174,7 @@ export function LandingPage() {
                     <h3 className="font-medium text-[--text-primary] group-hover:text-[--brand-primary] transition-colors">{title}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-[--text-secondary]">{body}</p>
                     <span className="mt-3 inline-flex items-center gap-1 text-xs text-[--text-muted] group-hover:text-[--brand-primary]">
-                      Mulai <ArrowRight className="h-3 w-3" />
+                      Start <ArrowRight className="h-3 w-3" />
                     </span>
                   </GlassCard>
                 </Link>
@@ -233,7 +233,7 @@ export function LandingPage() {
                 className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-5 py-2.5 text-sm text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               >
                 <Lock className="h-4 w-4" />
-                Lihat Live Demo
+                View Live Demo
               </Link>
             </div>
             <p className="mt-4 text-[11px] text-zinc-600">MetaMask + ERC-7715 · Sepolia testnet</p>

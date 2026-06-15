@@ -190,7 +190,7 @@ export default function AgentDashboardPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-zinc-100">{agentsWithPermission.length}</p>
-                    <p className="text-xs text-zinc-500">Agents siap</p>
+                    <p className="text-xs text-zinc-500">Ready agents</p>
                   </div>
                 </CardContent>
               </Card>
@@ -225,7 +225,7 @@ export default function AgentDashboardPage() {
                   <div>
                     <CardTitle>Agent Controls</CardTitle>
                     <CardDescription className="mt-1">
-                      Start untuk cycle otomatis, atau ⚡ untuk single cycle (think → audit → execute)
+                      Start for automatic cycles, or ⚡ for a single cycle (think → audit → execute)
                     </CardDescription>
                   </div>
                   <Button variant="outline" size="sm" onClick={fetchStatuses}>
@@ -323,7 +323,7 @@ export default function AgentDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Venice Decisions</CardTitle>
-                <CardDescription>AI reasoning dari agent brain</CardDescription>
+                <CardDescription>AI reasoning from agent brain</CardDescription>
               </CardHeader>
               <CardContent>
                 {decisionLogs.length > 0 ? (

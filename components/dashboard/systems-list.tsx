@@ -36,9 +36,9 @@ export function SystemsList() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
-            <CardTitle>Agents Terdaftar</CardTitle>
-            <CardDescription className="mt-1">
-              Agent yang sudah di-register atau memiliki permission aktif.
+            <CardTitle>Registered Agents</CardTitle>
+            <CardDescription className="max-w-2xl text-[--text-secondary]">
+              Registered agents or those with active permissions.
             </CardDescription>
           </div>
           <Button variant="emerald" size="sm" asChild>

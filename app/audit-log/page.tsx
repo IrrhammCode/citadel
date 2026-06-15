@@ -16,8 +16,8 @@ export default function AuditLogPage() {
         <PipelineGuide compact />
 
         <PageSection
-          title="Riwayat Keputusan"
-          description="Semua spend request yang diaudit Venice AI — approved atau blocked."
+          title="Decision History"
+          description="All spend requests audited by Venice AI — approved or blocked."
         >
           <Card>
             <CardContent className="p-0 pt-6">

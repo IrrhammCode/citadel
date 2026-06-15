@@ -784,6 +784,25 @@ Citadel was built on **real ERC-7715 / ERC-7710 integration**, not mocks. During
 | 8 | Multi-agent permission inventory patterns missing | Medium |
 | 9 | Conflicting permission request shapes in the wild | High |
 | 10 | Advanced Permissions wallet UX for CFO signers | Medium |
+| 11 | ERC-7715 `dependencies[]` undeployed accounts | Medium |
+| 12 | EOA vs smart-account session redemption paths | High |
+| 13 | Split CFO vs session wallet client wiring | Medium |
+| 14 | No delegation preflight before spend | Medium |
+
+**Venice AI (10 issues — see `feedback.md` § Venice AI):**
+
+| # | Issue | Severity |
+|---|-------|----------|
+| V1 | Fail-closed treasury audit pattern undocumented | High |
+| V2 | x402 token usage opaque / billing heuristics | Medium |
+| V3 | JSON schema drift → multi-layer retry | Medium |
+| V4 | Enhanced compliance verdict schema is DIY | Medium |
+| V5 | Crypto RPC separate from chat API | Medium |
+| V6 | Web search not first-class SDK | Medium |
+| V7 | Image API separate endpoint | Low |
+| V8 | `agentThink` throws vs `audit` fail-closes | Medium |
+| V9 | No agent → audit → approval orchestration guide | High |
+| V10 | No documented fallback / degraded-mode pattern | Medium |
 
 **Citadel workarounds cited in feedback:**
 

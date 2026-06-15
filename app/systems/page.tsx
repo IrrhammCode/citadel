@@ -23,7 +23,7 @@ export default function SystemsPage() {
   return (
     <AppShell
       title="Systems"
-      description="Kelola autonomous agents — custom dan built-in."
+      description="Manage autonomous agents — custom and built-in."
       actions={
         <Button variant="emerald" size="sm" asChild>
           <Link href="/register-agent">
@@ -37,7 +37,7 @@ export default function SystemsPage() {
         <PipelineGuide compact />
 
         <PageSection
-          title="Agents Aktif"
+          title="Active Agents"
           description="Agents registered with permissions — ready to run."
         >
           <SystemsList />
@@ -46,7 +46,7 @@ export default function SystemsPage() {
         {builtinWithoutPermission.length > 0 && (
           <PageSection
             title="Built-in Templates"
-            description="Gunakan template ini atau register custom agent via wizard."
+            description="Use these templates or register a custom agent via the wizard."
           >
             <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.06}>
               {builtinWithoutPermission.slice(0, 6).map((system) => (
@@ -63,7 +63,7 @@ export default function SystemsPage() {
                       <Badge variant="secondary">Template</Badge>
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/systems/${system.id}`}>
-                          Buka
+                          Open
                           <ArrowRight className="h-3 w-3" />
                         </Link>
                       </Button>
