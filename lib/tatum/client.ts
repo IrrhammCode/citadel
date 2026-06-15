@@ -29,6 +29,7 @@ async function tatumFetch<T>(
     headers: {
       "Content-Type": "application/json",
       "x-api-key": getApiKey(),
+      "x-testnet-type": "ethereum-sepolia",
       ...options.headers,
     },
   });
